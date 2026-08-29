@@ -1,0 +1,49 @@
+# ── Secrets & local config (never commit real endpoints/keys) ────────────────
+.ai-redteam.yaml
+.ai-redteam-checkpoint.json
+.ai-redteam-history.db
+*.env
+.env
+
+# ── Run outputs (contain real target endpoints, models, and responses) ───────
+reports/
+transfer_payloads_*.json
+*.sarif
+auto_report.json
+discovery_*.json
+multiturn_*.json
+dynamic_*.json
+tap_*.json
+
+# ── Proprietary / commercial material (keep out of the public repo) ──────────
+docs/*.docx
+docs/*.xlsx
+BUSINESS_DEVELOPMENT_PLAN.md
+CODEBASE_REPORT.md
+
+# ── Analysis / graph artifacts ───────────────────────────────────────────────
+.graphify*
+graphify-out/
+snapshot.md
+
+# ── Python build / cache ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ── Editor / OS ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local Claude Code settings (user-specific)
+.claude/settings.local.json

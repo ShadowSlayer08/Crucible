@@ -1,0 +1,112 @@
+%%{init: {"theme": "default", "flowchart": {"curve": "basis"}}}%%
+flowchart LR
+
+    subgraph Untrusted["Untrusted Zone"]
+        U["Red Team Operator"]
+        TGT["Target AI System\n(REST API — any provider)"]
+    end
+
+    subgraph Platform["Red Teaming Platform — CLI v2.4  (Single-Tenant, Local)"]
+
+        subgraph Config["Configuration Layer"]
+            YAML["YAML Config\n(.ai-redteam.yaml)"]
+            ENV["Env Vars\n(AI_RT_API_KEY etc.)"]
+        end
+
+        subgraph InputLayer["Attack Ingestion"]
+            PL["Payload Library\n(28 VAPT + 27 RedTeam + 22 ATLAS)"]
+            CPL["Custom Payload Loader\n(YAML / JSON)"]
+            DISC["Discovery Engine\n(5 recon probes)"]
+        end
+
+        subgraph ExecLayer["Execution Engine"]
+            ENG["REST Engine\nengine.py\n(9 schema presets)"]
+            DYN["Dynamic Engine\ndynamic_engine.py\n(PAIR loop + Bandit)"]
+            MT["Multi-Turn Engine\nmultiturn.py\n(5 scenarios)"]
+        end
+
+        subgraph AttackGen["Attacker LLM  (Local)"]
+            OLLAMA["Ollama\n(kimi-k2 default)"]
+        end
+
+        subgraph ScoreLayer["Scoring and Classification"]
+            CLS["Rule Classifier\nclassifier.py\n(heuristic patterns)"]
+            JDG["LLM Judge\nclassifier.py run_judge\n(stage-2 optional)"]
+            SCO["Severity Scorer\nclassifier.py calculate_score\n(weighted 0-100)"]
+        end
+
+        subgraph ReportLayer["Reporting"]
+            RPT["Terminal Reporter\nreporter.py"]
+            ARPT["ATLAS Reporter\natlas_reporter.py"]
+            ORPT["OWASP Reporter\nowasp.py"]
+        end
+
+        subgraph DataLayer["Data Stores"]
+            CORPUS[("Attack Corpus\nPython dicts\npayloads/")]
+            RESULTS[("Results Store\nreports/\nJSON, CSV, SARIF, PDF")]
+            CHK[("Checkpoint\n.ai-redteam-checkpoint.json")]
+        end
+
+    end
+
+    subgraph CICD["CI/CD — GitHub Actions"]
+        GHA["Workflow\n.github/workflows/ai-redteam.yml"]
+        SARIF_U["SARIF Upload\nGitHub Security tab"]
+        PRC["PR Comment Bot\nscan scorecard"]
+    end
+
+    %% --- User inputs ---
+    U -->|"credentials  [API key]"| YAML
+    U -->|"test config  [endpoint, model, schema]"| ENG
+    YAML -->|"defaults  [config]"| ENG
+    ENV -->|"secrets  [credentials]"| ENG
+
+    %% --- Discovery ---
+    U -->|"target params"| DISC
+    DISC -->|"recon prompts  [prompt]"| TGT
+    TGT -->|"discovery responses  [model output]"| DISC
+
+    %% --- Payload routing ---
+    CORPUS --> PL
+    PL -->|"static payloads  [prompt + metadata]"| ENG
+    CPL -->|"custom payloads  [prompt + metadata]"| ENG
+
+    %% --- Execution to target ---
+    ENG -->|"adversarial prompts  [prompt]"| TGT
+    TGT -->|"model responses  [model output]"| CLS
+
+    %% --- Multi-turn ---
+    MT -->|"turn sequence  [prompt]"| TGT
+    TGT -->|"turn responses  [model output]"| MT
+    MT -->|"turn verdicts  [classification]"| SCO
+
+    %% --- Dynamic engine ---
+    DYN -->|"mutated prompts  [adversarial prompt]"| TGT
+    TGT -->|"responses  [model output]"| DYN
+    DYN <-->|"generate / judge / mutate  [adversarial prompt]"| OLLAMA
+    DYN -->|"dynamic verdicts  [classification]"| SCO
+
+    %% --- Classification pipeline ---
+    CLS -->|"WARN escalation  [prompt + response]"| JDG
+    JDG -->|"upgraded verdict  [PASS or FAIL]"| SCO
+    CLS -->|"verdict + signals  [classification]"| SCO
+
+    %% --- Scoring to reports ---
+    SCO -->|"risk scores  [telemetry]"| RPT
+    SCO -->|"coverage map  [telemetry]"| ARPT
+    SCO -->|"owasp map  [telemetry]"| ORPT
+    SCO -->|"scored results  [findings]"| RESULTS
+    SCO -->|"progress  [checkpoint]"| CHK
+
+    %% --- Reports to operator ---
+    RPT -->|"terminal output  [findings]"| U
+    ARPT -->|"atlas report  [findings]"| U
+    ORPT -->|"owasp report  [findings]"| U
+    RESULTS -->|"JSON / CSV / PDF  [findings]"| U
+    RESULTS -->|"SARIF  [security findings]"| SARIF_U
+
+    %% --- CI/CD ---
+    GHA -->|"scheduled trigger  [pipeline]"| ENG
+    SARIF_U -->|"upload status"| GHA
+    GHA -->|"scan result"| PRC
+    PRC -->|"PR comment  [risk score + ASR]"| U

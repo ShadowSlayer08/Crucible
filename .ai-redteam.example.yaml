@@ -1,0 +1,33 @@
+# AI Red Team CLI — Config File (EXAMPLE)
+# Copy to .ai-redteam.yaml and fill in your own values.
+# The real .ai-redteam.yaml is git-ignored — never commit credentials.
+#
+# All values here are defaults; CLI flags always override them.
+
+# ── Target ──────────────────────────────────────────────────────
+# Prefer the AI_RT_API_KEY / AI_RT_ENDPOINT env vars over storing a key here.
+# api_key: sk-xxx
+endpoint: http://localhost:11434        # e.g. Ollama local, or a provider URL
+model: llama-3.3-70b
+schema: openai              # openai | anthropic | google | mistral | cohere | ollama | azure | bedrock | custom | browser
+
+# ── Run behaviour ────────────────────────────────────────────────
+concurrency: 1              # parallel workers (1-10)
+verbose: false
+no_color: false
+
+# ── Frameworks ───────────────────────────────────────────────────
+framework: atlas            # add MITRE ATLAS tactic coverage report
+owasp: true                 # add OWASP LLM Top 10 coverage report
+
+# ── Operational safety ───────────────────────────────────────────
+# budget: 5.0               # halt once estimated API spend reaches $5
+# max_calls: 500            # or halt after N calls
+
+# ── CI/CD ────────────────────────────────────────────────────────
+ci: false
+ci_threshold: 30
+
+# ── Output ───────────────────────────────────────────────────────
+output_dir: ./reports
+no_save: false

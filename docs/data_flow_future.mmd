@@ -1,0 +1,153 @@
+%%{init: {"theme": "default", "flowchart": {"curve": "basis"}}}%%
+flowchart LR
+
+    %% === LEGEND ===
+    %% Solid borders  = exists today (v2.4)
+    %% Dashed borders = NEW — planned in Horizon 1/2/3 roadmap
+
+    subgraph Untrusted["Untrusted Zone"]
+        U["Red Team Operator\n(human or CI pipeline)"]
+        TGT["Target AI System\n(LLM, Agent, RAG, Tool-use)"]
+        EXT_REG["External Regulator\n(EU AI Act auditor)"]
+    end
+
+    subgraph CustomerTenant["Customer Tenant  (future multi-tenant)"]
+
+        subgraph WebUI["H2 — Web Control Plane"]
+            FRONTEND["React Dashboard\n(scan config, live results)"]
+            API_SRV["FastAPI Server\n(REST + WebSocket)"]
+            IAM["Identity and Access\n(OAuth2 / SSO)"]
+        end
+
+        subgraph InputLayer["Attack Ingestion"]
+            PL["Payload Library\n(28 VAPT + 27 RedTeam + 22 ATLAS)"]
+            CPL["Custom Payload Loader"]
+            DISC["Discovery Engine\n(5 probes)"]
+            MKTPL["H3 — Attack Pack\nMarketplace"]
+            VDB[("H2 — Vector DB\nEmbedding-indexed corpus")]
+        end
+
+        subgraph ExecLayer["Execution Engine"]
+            ENG["REST Engine\n(9+ schema presets)"]
+            DYN["Dynamic Engine\n(PAIR + Bandit)"]
+            MT["Multi-Turn Engine"]
+            AGENT_ENG["H2 — Agentic Test Engine\n(MCP / tool-call attacks)"]
+            SCHED["H3 — Continuous Assurance\nScheduler"]
+        end
+
+        subgraph AttackGen["Attacker LLM"]
+            OLLAMA["Local Ollama\n(kimi-k2)"]
+            REMOTE_ATK["H2 — Remote Attacker LLM\n(cloud-hosted, no local infra)"]
+        end
+
+        subgraph ScoreLayer["Scoring and Classification"]
+            CLS["Rule Classifier"]
+            JDG["LLM Judge"]
+            SCO["Severity Scorer\n(0-100)"]
+            NIST_TAG["H1 — NIST AI RMF\nFunction Tagger"]
+        end
+
+        subgraph ReportLayer["Reporting"]
+            RPT["Terminal / JSON / CSV\nSARIF / PDF"]
+            ARPT["ATLAS Reporter"]
+            ORPT["OWASP Reporter"]
+            COMP_RPT["H2 — Compliance Report\n(SOC 2 / ISO 42001\nevidence pack)"]
+        end
+
+        subgraph DataLayer["Data Stores"]
+            CORPUS[("Attack Corpus\nPython dicts")]
+            RESULTS[("Results Store\nFlat Files")]
+            CHK[("Checkpoint .json")]
+            PGDB[("H2 — PostgreSQL\nFindings Database")]
+            GRAPH[("H3 — Findings Graph DB\nCross-run trend + cluster")]
+        end
+
+    end
+
+    subgraph InternalPlane["Internal Plane (Operator Infra)"]
+        subgraph CICD["CI/CD — GitHub Actions"]
+            GHA["Workflow"]
+            SARIF_U["SARIF Upload"]
+            PRC["PR Comment Bot"]
+        end
+        subgraph MoreCI["H2 — Additional CI Integrations"]
+            GITLAB_CI["GitLab CI"]
+            JENKINS["Jenkins / Azure DevOps"]
+        end
+    end
+
+    %% === Existing flows (solid) ===
+    U -->|"credentials  [API key]"| ENG
+    U -->|"test config"| DISC
+    DISC -->|"recon prompts  [prompt]"| TGT
+    TGT -->|"discovery responses  [model output]"| DISC
+    CORPUS --> PL
+    PL --> ENG
+    CPL --> ENG
+    ENG -->|"adversarial prompts  [prompt]"| TGT
+    TGT -->|"model responses  [model output]"| CLS
+    CLS -->|"WARN escalation"| JDG
+    JDG -->|"verdict"| SCO
+    CLS -->|"verdict"| SCO
+    SCO --> NIST_TAG
+    NIST_TAG --> RPT
+    SCO --> ARPT
+    SCO --> ORPT
+    SCO --> RESULTS
+    SCO --> CHK
+    RPT --> U
+    ARPT --> U
+    ORPT --> U
+    RESULTS -->|"SARIF  [security findings]"| SARIF_U
+    RESULTS -->|"JSON / CSV / PDF"| U
+    DYN -->|"mutated prompts  [adversarial]"| TGT
+    TGT -->|"responses"| DYN
+    DYN <-->|"generate / mutate"| OLLAMA
+    DYN -->|"verdicts"| SCO
+    MT -->|"turn sequence  [prompt]"| TGT
+    TGT -->|"turn responses"| MT
+    MT --> SCO
+    GHA -->|"scheduled run"| ENG
+    SARIF_U --> GHA
+    GHA --> PRC
+    PRC --> U
+
+    %% === Future flows (dashed via style) ===
+    U -->|"login  [credentials]"| IAM
+    IAM --> FRONTEND
+    FRONTEND <-->|"scan config / live results  [telemetry]"| API_SRV
+    API_SRV --> ENG
+    API_SRV --> DYN
+    MKTPL -->|"community attack packs  [prompt + metadata]"| PL
+    VDB -->|"semantic search results  [prompt vectors]"| ENG
+    AGENT_ENG -->|"tool-call attacks  [adversarial tool input]"| TGT
+    TGT -->|"agent responses  [model output]"| AGENT_ENG
+    AGENT_ENG --> SCO
+    SCHED -->|"continuous run trigger  [pipeline]"| ENG
+    REMOTE_ATK <-->|"generate / mutate  [adversarial prompt]"| DYN
+    SCO --> PGDB
+    PGDB --> GRAPH
+    GRAPH --> COMP_RPT
+    COMP_RPT -->|"evidence pack  [compliance report]"| U
+    COMP_RPT -->|"audit evidence  [compliance artifacts]"| EXT_REG
+    GITLAB_CI -->|"run trigger"| ENG
+    JENKINS -->|"run trigger"| ENG
+
+    %% === Style: future (H1) nodes ===
+    style NIST_TAG fill:#fff9e6,stroke:#f5a623,stroke-dasharray:5 5
+    %% === Style: future (H2) nodes ===
+    style FRONTEND fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style API_SRV fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style IAM fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style MKTPL fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style VDB fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style AGENT_ENG fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style REMOTE_ATK fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style PGDB fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style COMP_RPT fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style GITLAB_CI fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    style JENKINS fill:#e8f4fd,stroke:#2196F3,stroke-dasharray:5 5
+    %% === Style: future (H3) nodes ===
+    style SCHED fill:#f0ffe8,stroke:#4CAF50,stroke-dasharray:5 5
+    style GRAPH fill:#f0ffe8,stroke:#4CAF50,stroke-dasharray:5 5
+    style EXT_REG fill:#f0ffe8,stroke:#4CAF50,stroke-dasharray:5 5
