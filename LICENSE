@@ -1,0 +1,29 @@
+CRUCIBLE — CRUCIBLE
+Copyright (c) 2026. All Rights Reserved.
+
+SOURCE-AVAILABLE LICENSE (not an OSI open-source license)
+
+This source code is made available for review, evaluation, education, and
+authorized security testing. It is NOT released under an open-source license.
+
+Permitted:
+  - Viewing, studying, and running the software for authorized security
+    assessments of AI systems you own or have explicit written permission to test.
+  - Personal, non-commercial evaluation and research.
+
+Not permitted without prior written permission from the copyright holder:
+  - Commercial use, resale, or offering the software as a service.
+  - Redistribution of modified or unmodified copies.
+  - Removing or altering this notice.
+
+RESPONSIBLE USE
+This tool generates and executes adversarial prompts against AI systems. Use it
+only against systems you own or are explicitly authorized to test. Unauthorized
+testing may violate computer-fraud laws, provider terms of service, and
+professional ethics codes. The authors accept no liability for misuse.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE.
+
+To request a commercial or open-source license, contact the copyright holder.
