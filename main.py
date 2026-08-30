@@ -102,6 +102,8 @@ import vector_poison
 import declarative
 import budget as budget_mod
 import targets as targets_mod
+import cache as cache_mod
+import rundiff
 import longcontext
 import obfuscation_wrapper
 import defence_audit
@@ -535,6 +537,10 @@ def build_parser():
                    help="Halt the run after N API calls to the target")
     p.add_argument("--seed", type=int, default=None, metavar="N",
                    help="Seed all randomness (bandit / TAP / sampling) for reproducible runs")
+    p.add_argument("--cache", action="store_true",
+                   help="Cache target responses; re-runs of the same payload skip the API call (free, deterministic)")
+    p.add_argument("--clear-cache", action="store_true",
+                   help="Delete the response cache and exit")
     p.add_argument("--lang", metavar="CODE",
                    help="In --mode multilingual, restrict to one language code (e.g. es, zh)")
     p.add_argument("--modality", choices=["text", "image", "audio", "video"], default="text",
@@ -647,6 +653,10 @@ def build_parser():
                    help="Delete the run-history database and exit")
     p.add_argument("--export-history",       metavar="FILE",
                    help="Export the full run history to a CSV file and exit")
+    p.add_argument("--diff",                 metavar="PRIOR.json",
+                   help="After this run, diff current findings against a prior report (regressions vs fixes)")
+    p.add_argument("--diff-reports",         metavar="A.json,B.json",
+                   help="Diff two saved report files at the finding level, then exit")
     p.add_argument("--no-history",           action="store_true",
                    help="Do not record this run in the trend-history database")
     p.add_argument("--no-sarif",             action="store_true",
@@ -883,8 +893,18 @@ def execute_test(config, test):
     (--schema browser), a multimodal/vision request (--modality image), or the
     standard REST engine, returning an engine-shaped api_result dict.
 
-    Enforces the cost/budget guard: once the limit is hit, subsequent tests are
-    skipped WITHOUT an API call (returned as ERROR) so spend stops immediately."""
+    Cache hits cost nothing and return instantly; the budget guard then bounds any
+    live calls, and successful live responses are cached for next time."""
+    cache = config.get("_cache")
+    _modality = config.get("_modality", "text")
+    ckey = None
+    if cache is not None:
+        ckey = cache.key(config, test, _modality)
+        hit = cache.get(ckey)
+        if hit is not None:
+            return {"verdict": None, "response_text": hit, "error": None,
+                    "status_code": 200, "raw_response": None, "cached": True}
+
     tracker = config.get("_budget")
     if tracker is not None and tracker.exceeded():
         tracker.note_skip()
@@ -914,6 +934,9 @@ def execute_test(config, test):
     if tracker is not None:
         tracker.record(config.get("schema", "custom"),
                        test.get("payload", ""), api.get("response_text", "") or "")
+    if cache is not None and ckey and api.get("verdict") != "ERROR" \
+            and api.get("response_text"):
+        cache.put(ckey, api["response_text"])
     return api
 
 
@@ -1634,6 +1657,13 @@ def run(args):
         classifier_eval.print_classifier_eval()
         sys.exit(0)
 
+    # ── --clear-cache: wipe the response cache, then exit ─────────────────────
+    if getattr(args, "clear_cache", False):
+        ok = cache_mod.clear_cache()
+        print(f"  {C.GREEN('✓') if ok else C.YELLOW('•')} "
+              f"{'Response cache cleared.' if ok else 'No cache to clear.'}\n")
+        sys.exit(0)
+
     # ── --clear-history: wipe the run-history DB, then exit ───────────────────
     if getattr(args, "clear_history", False):
         ok = trend.clear_history()
@@ -1645,6 +1675,20 @@ def run(args):
     if getattr(args, "export_history", None):
         n = trend.export_history_csv(args.export_history)
         print(f"  {C.GREEN('✓')} Exported {n} run(s) → {C.CYAN(args.export_history)}\n")
+        sys.exit(0)
+
+    # ── --diff-reports A,B: finding-level diff of two saved reports, then exit ─
+    if getattr(args, "diff_reports", None):
+        parts = [p.strip() for p in args.diff_reports.split(",")]
+        if len(parts) != 2:
+            print(f"  {C.RED('--diff-reports needs two files:')} A.json,B.json\n")
+            sys.exit(1)
+        try:
+            d = rundiff.diff_reports(parts[0], parts[1])
+        except Exception as e:
+            print(f"  {C.RED('Could not read reports:')} {e}\n")
+            sys.exit(1)
+        rundiff.print_diff(d, os.path.basename(parts[0]), os.path.basename(parts[1]))
         sys.exit(0)
 
     # ── --trend / --history: print run history from the SQLite DB, then exit ───
@@ -2054,6 +2098,8 @@ def run(args):
     if getattr(args, "budget", None) is not None or getattr(args, "max_calls", None) is not None:
         config["_budget"] = budget_mod.BudgetTracker(
             limit_usd=getattr(args, "budget", None), max_calls=getattr(args, "max_calls", None))
+    if getattr(args, "cache", False):
+        config["_cache"] = cache_mod.ResponseCache()
     if schema == "browser":
         b_cfg = {
             "url":               getattr(args, "browser_url", None),
@@ -2335,6 +2381,17 @@ def run(args):
 
     if config.get("_budget") is not None:
         budget_mod.print_budget_summary(config["_budget"])
+    if config.get("_cache") is not None:
+        cache_mod.print_cache_summary(config["_cache"])
+
+    # ── --diff: finding-level diff of this run against a prior report ─────────
+    if getattr(args, "diff", None):
+        try:
+            prior = rundiff.load_report(args.diff)
+            rundiff.print_diff(rundiff.diff(prior, results),
+                               os.path.basename(args.diff), "this run")
+        except Exception as e:
+            print(f"  {C.YELLOW('Diff skipped:')} could not read {args.diff} ({e})\n")
 
     # ── Completion-rate: did the FAILs also finish the user task? (roadmap #40) ─
     if getattr(args, "completion_rate", False):
