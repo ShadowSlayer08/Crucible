@@ -101,6 +101,7 @@ import guardrails
 import vector_poison
 import declarative
 import budget as budget_mod
+import targets as targets_mod
 import longcontext
 import obfuscation_wrapper
 import defence_audit
@@ -191,6 +192,16 @@ MODE_DESCRIPTIONS = {
         "label": "Multimodal Mode  (Vision Attack Surface)",
         "desc":  "Image-based injection — use --modality image to send the attack image.",
         "tests": EXPANDED_MODE_TESTS["multimodal"],
+    },
+    "audio": {
+        "label": "Audio Mode  (Voice / Speech Attack Surface)",
+        "desc":  "Hidden voice commands, transcription injection — use --modality audio.",
+        "tests": EXPANDED_MODE_TESTS["audio"],
+    },
+    "video": {
+        "label": "Video Mode  (Frame / Temporal Attack Surface)",
+        "desc":  "Frame injection, overlays, temporal split — use --modality video.",
+        "tests": EXPANDED_MODE_TESTS["video"],
     },
     "memory-poison": {
         "label": "Memory Poisoning Mode  (RAG / Knowledge-Base Attacks)",
@@ -442,7 +453,7 @@ def build_parser():
         "vapt", "redteam", "payload",
         "mcp", "agentic", "rag", "swarm", "policy", "benign", "obfuscation",
         "multilingual", "multimodal", "memory-poison", "pismith",
-        "rag-long", "defence-audit", "authz",
+        "rag-long", "defence-audit", "authz", "audio", "video",
     ])
     # ── Declarative Vuln × Attack composition (roadmap G6) ────────────────────
     p.add_argument("--vuln", metavar="A,B",
@@ -526,8 +537,8 @@ def build_parser():
                    help="Seed all randomness (bandit / TAP / sampling) for reproducible runs")
     p.add_argument("--lang", metavar="CODE",
                    help="In --mode multilingual, restrict to one language code (e.g. es, zh)")
-    p.add_argument("--modality", choices=["text", "image"], default="text",
-                   help="In --mode multimodal, send the attack image (vision schemas only)")
+    p.add_argument("--modality", choices=["text", "image", "audio", "video"], default="text",
+                   help="Send the attack as image/audio/video (multimodal-capable schemas only)")
     p.add_argument("--plugins-dir", metavar="DIR", default="plugins",
                    help="Auto-load custom test plugins (modules exporting TESTS) from DIR")
     p.add_argument("--no-plugins", action="store_true",
@@ -566,6 +577,16 @@ def build_parser():
                    help="Write a starter .ai-redteam.yaml config file and exit")
     p.add_argument("--no-config",        action="store_true",
                    help="Ignore any config file even if found")
+
+    # ── Saved target profiles (a target book — no keys stored) ────────────────
+    p.add_argument("--target",           metavar="NAME",
+                   help="Load a saved target's endpoint/model/schema (see --list-targets)")
+    p.add_argument("--save-target",      metavar="NAME",
+                   help="Save the current --endpoint/--model/--schema as a named target, then exit")
+    p.add_argument("--list-targets",     action="store_true",
+                   help="List saved targets, then exit")
+    p.add_argument("--delete-target",    metavar="NAME",
+                   help="Delete a saved target, then exit")
 
     # ── NEW: CI mode ─────────────────────────────────────────────────────────
     p.add_argument("--ci",               action="store_true",
@@ -879,9 +900,14 @@ def execute_test(config, test):
         except Exception as e:
             return {"verdict": "ERROR", "error": str(e)[:200], "response_text": ""}
 
-    if config.get("_modality") == "image" and test.get("image") \
-            and multimodal.supports_modality(config.get("schema", "")):
+    _mod = config.get("_modality")
+    _schema = config.get("schema", "")
+    if _mod == "image" and test.get("image") and multimodal.supports_modality(_schema, "image"):
         api = run_test(config, test, image_b64=test["image"])
+    elif _mod == "audio" and test.get("audio") and multimodal.supports_modality(_schema, "audio"):
+        api = run_test(config, test, audio_b64=test["audio"])
+    elif _mod == "video" and test.get("video") and multimodal.supports_modality(_schema, "video"):
+        api = run_test(config, test, video_frames=test["video"])
     else:
         api = run_test(config, test)
 
@@ -1547,6 +1573,29 @@ def run(args):
     if getattr(args, "seed", None) is not None:
         import random
         random.seed(args.seed)
+
+    # ── Saved target profiles (before anything reads endpoint/model/schema) ───
+    if getattr(args, "list_targets", False):
+        targets_mod.print_targets()
+        sys.exit(0)
+    if getattr(args, "delete_target", None):
+        ok = targets_mod.delete_target(args.delete_target)
+        print(f"  {C.GREEN('✓') if ok else C.YELLOW('•')} "
+              f"{'Deleted target ' + args.delete_target if ok else 'No such target.'}\n")
+        sys.exit(0)
+    if getattr(args, "save_target", None):
+        ep = args.endpoint or os.environ.get("AI_RT_ENDPOINT", "")
+        if not ep:
+            print(f"  {C.RED('--save-target needs --endpoint')} (and --model/--schema).\n")
+            sys.exit(1)
+        path = targets_mod.save_target(args.save_target, ep.rstrip("/"), args.model, args.schema)
+        print(f"  {C.GREEN('✓')} Saved target '{C.CYAN(args.save_target)}' → {path}  "
+              f"{C.DIM('(key not stored — pass --api-key / AI_RT_API_KEY at run time)')}\n")
+        sys.exit(0)
+    if getattr(args, "target", None):
+        if not targets_mod.apply_target(args, args.target):
+            print(f"  {C.RED('No saved target')} '{args.target}'. See --list-targets.\n")
+            sys.exit(1)
 
     print(banner())
 

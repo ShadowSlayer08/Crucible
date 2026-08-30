@@ -19,7 +19,8 @@ ALL_NEW = [t for suite in EXPANDED_MODE_TESTS.values() for t in suite]
 def test_expanded_modes_registered():
     assert set(EXPANDED_MODE_TESTS) == {
         "mcp", "agentic", "rag", "swarm", "policy", "benign", "obfuscation",
-        "multilingual", "multimodal", "memory-poison", "pismith", "authz"}
+        "multilingual", "multimodal", "memory-poison", "pismith", "authz",
+        "audio", "video"}
 
 
 def test_expected_counts():

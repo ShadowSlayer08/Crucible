@@ -36,17 +36,28 @@ _SCHEMA_MODALITY = {
 _DEFAULT_MIME = "image/png"
 
 
+# Audio: OpenAI-family models take an input_audio block; Gemini takes inline_data.
+_AUDIO_MODALITY = {"openai": "openai", "azure": "openai", "google": "google"}
+# Video: OpenAI-family has no native video → send sampled frames as images;
+# Gemini takes a video inline_data block.
+_VIDEO_MODALITY = {"openai": "openai_frames", "azure": "openai_frames", "google": "google"}
+
+_MODALITY_MAPS = {"image": _SCHEMA_MODALITY, "audio": _AUDIO_MODALITY, "video": _VIDEO_MODALITY}
+
+
 # ── Tiny 1×1 transparent PNG (base64) — for tests and placeholder payloads ────
 # Decodes to a valid 67-byte single-pixel PNG. No external file needed.
 TINY_PNG_B64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk"
     "+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
 )
+# Tiny silent WAV (44-byte header + no samples) for audio test fixtures.
+TINY_WAV_B64 = "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA="
 
 
-def supports_modality(schema_name: str) -> bool:
-    """Return True if *schema_name* maps to a schema that can carry an image."""
-    return schema_name in _SCHEMA_MODALITY
+def supports_modality(schema_name: str, modality: str = "image") -> bool:
+    """Return True if *schema_name* can carry the given modality (image/audio/video)."""
+    return schema_name in _MODALITY_MAPS.get(modality, {})
 
 
 def build_image_message(schema_name: str, prompt: str, image_b64: str,
@@ -103,6 +114,51 @@ def build_image_message(schema_name: str, prompt: str, image_b64: str,
 
     # Unreachable — _SCHEMA_MODALITY only maps to the two families above.
     raise ValueError(f"Unhandled modality family for schema '{schema_name}'")
+
+
+def build_audio_message(schema_name: str, prompt: str, audio_b64: str,
+                        audio_format: str = "wav"):
+    """Provider-correct content block for a text prompt + base64 audio clip.
+    openai family → {type:input_audio}; google → inline_data audio part."""
+    family = _AUDIO_MODALITY.get(schema_name)
+    if family is None:
+        raise ValueError(f"Schema '{schema_name}' does not support the audio modality. "
+                         f"Audio-capable: {', '.join(sorted(_AUDIO_MODALITY))}")
+    raw = _strip_data_uri(audio_b64)
+    if family == "openai":
+        return [
+            {"type": "text", "text": prompt},
+            {"type": "input_audio", "input_audio": {"data": raw, "format": audio_format}},
+        ]
+    # google (Gemini) inline_data part
+    return [
+        {"text": prompt},
+        {"inline_data": {"mime_type": f"audio/{audio_format}", "data": raw}},
+    ]
+
+
+def build_video_message(schema_name: str, prompt: str, frames, mime_type: str = "image/png"):
+    """Provider-correct content for a text prompt + video. openai family has no
+    native video, so *frames* (a list of base64 images) are sent as image blocks;
+    google takes a single video inline_data block (pass one base64 string)."""
+    family = _VIDEO_MODALITY.get(schema_name)
+    if family is None:
+        raise ValueError(f"Schema '{schema_name}' does not support the video modality. "
+                         f"Video-capable: {', '.join(sorted(_VIDEO_MODALITY))}")
+    if family == "openai_frames":
+        seq = frames if isinstance(frames, (list, tuple)) else [frames]
+        content = [{"type": "text", "text": prompt}]
+        for fr in seq:
+            raw = _strip_data_uri(fr)
+            content.append({"type": "image_url",
+                            "image_url": {"url": f"data:{mime_type};base64,{raw}"}})
+        return content
+    # google: a single video blob
+    raw = _strip_data_uri(frames[0] if isinstance(frames, (list, tuple)) else frames)
+    return [
+        {"text": prompt},
+        {"inline_data": {"mime_type": "video/mp4", "data": raw}},
+    ]
 
 
 def _strip_data_uri(image_b64: str) -> str:
