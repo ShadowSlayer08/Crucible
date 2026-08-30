@@ -25,13 +25,16 @@ the app via `python server.py` / `__main__`; it is imported lazily so the
 module — and create_app() — work without it.
 """
 
+import json
+
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 import engine
 import classifier
-from payloads import VAPT_TESTS, REDTEAM_TESTS, EXPANDED_MODE_TESTS
+from payloads import VAPT_TESTS, REDTEAM_TESTS, EXPANDED_MODE_TESTS, enrich_test
 
 API_VERSION = "3.0"
 
@@ -158,46 +161,62 @@ def _estimate_cost(tests: list) -> dict:
     }
 
 
-def _run_live_scan(mode: str, tests: list, config: dict) -> dict:
-    """Execute every test against a real endpoint and score the results.
+def _enrich(tests: list) -> list:
+    """Enrich tests with ATLAS/OWASP/metadata so coverage reports populate."""
+    from owasp import enrich_owasp
+    import metadata as _md
+    out = []
+    for t in tests:
+        out.append(_md.enrich_metadata(enrich_owasp(enrich_test(dict(t)))))
+    return out
 
-    Only reached when dry_run is explicitly false AND an endpoint is set.
-    Uses engine.run_test + classifier exactly as the CLI does.
-    """
-    results = []
-    for test in tests:
-        api_result = engine.run_test(config, test)
-        if api_result.get("verdict") == "ERROR":
-            cls = {
-                "verdict": "ERROR",
-                "confidence": "n/a",
-                "reason": api_result.get("error", "API error"),
-                "flagged_excerpt": "",
-                "signals": [],
-            }
-        else:
-            cls = classifier.classify_response(test, api_result.get("response_text", ""))
-            api_result["verdict"] = cls["verdict"]
-        combined = {**api_result, **cls}
-        results.append({"test": test, "result": combined})
 
+def _classify_one(test: dict, config: dict) -> dict:
+    """Run + classify a single test, returning the {test, result} row."""
+    api_result = engine.run_test(config, test)
+    if api_result.get("verdict") == "ERROR":
+        cls = {"verdict": "ERROR", "confidence": "n/a",
+               "reason": api_result.get("error", "API error"), "signals": []}
+    else:
+        cls = classifier.classify_response(test, api_result.get("response_text", ""))
+        api_result["verdict"] = cls["verdict"]
+    return {"test": test, "result": {**api_result, **cls}}
+
+
+def _row(r: dict) -> dict:
+    """Project a {test, result} row down to a UI-safe payload."""
+    return {
+        "id": r["test"]["id"], "name": r["test"].get("name", ""),
+        "category": r["test"].get("category", ""), "severity": r["test"].get("severity", ""),
+        "verdict": r["result"]["verdict"], "confidence": r["result"].get("confidence", ""),
+        "reason": r["result"].get("reason", ""),
+        "response_text": (r["result"].get("response_text", "") or "")[:2000],
+    }
+
+
+def _summary(results: list) -> dict:
+    """Scores + ASR-with-CI + coverage + guardrail block-rate for the dashboard."""
+    import coverage_report
+    import guardrails
+    import stats
     scores = classifier.calculate_score(results)
+    totals = scores["totals"]
+    # ASR denominator = every test that was actually evaluated (ERROR excluded).
+    n = sum(v for k, v in totals.items() if k != "error")
     return {
         "scores": scores,
-        "results": [
-            {
-                "id": r["test"]["id"],
-                "name": r["test"]["name"],
-                "category": r["test"]["category"],
-                "severity": r["test"]["severity"],
-                "verdict": r["result"]["verdict"],
-                "confidence": r["result"].get("confidence", ""),
-                "reason": r["result"].get("reason", ""),
-                "response_text": (r["result"].get("response_text", "") or "")[:2000],
-            }
-            for r in results
-        ],
+        "asr": stats.asr_ci(totals.get("fail", 0), n),
+        "coverage": coverage_report.policy_coverage(results),
+        "owasp": coverage_report.owasp_coverage_grid(results),
+        "guardrails": guardrails.evaluate_guardrails(results),
     }
+
+
+def _run_live_scan(mode: str, tests: list, config: dict) -> dict:
+    """Execute every test against a real endpoint and score the results.
+    Only reached when dry_run is explicitly false AND an endpoint is set."""
+    results = [_classify_one(t, config) for t in _enrich(tests)]
+    return {"results": [_row(r) for r in results], **_summary(results)}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -208,6 +227,10 @@ def create_app() -> FastAPI:
         title="CRUCIBLE — REST API",
         version=API_VERSION,
         description="API-first wrapper over the engine, classifier, and payload suites.",
+    )
+    # Allow the React dev server (and any local dashboard) to call the API.
+    app.add_middleware(
+        CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
     )
 
     @app.get("/health")
@@ -296,6 +319,37 @@ def create_app() -> FastAPI:
             "cost_estimate": cost,
             **outcome,
         }
+
+    @app.post("/scan/stream")
+    def scan_stream(req: ScanRequest):
+        """Server-Sent Events: stream per-test results live, then a final summary.
+        Emits `event: test` per result and `event: done` with the full summary."""
+        pool = _get_mode_tests(req.mode)
+        selected = _apply_filters(pool, req.categories, req.severities, req.limit)
+        endpoint = (req.config.endpoint or "").strip()
+        if not selected:
+            raise HTTPException(status_code=400, detail="No tests selected.")
+        if req.dry_run or not endpoint:
+            raise HTTPException(status_code=400,
+                                detail="Streaming requires dry_run=false and a config.endpoint.")
+        run_config = {"endpoint": endpoint.rstrip("/"), "api_key": req.config.api_key,
+                      "model": req.config.model, "schema": req.config.schema_name,
+                      "extra_headers": {}}
+        enriched = _enrich(selected)
+
+        def _gen():
+            results = []
+            total = len(enriched)
+            for i, t in enumerate(enriched, 1):
+                r = _classify_one(t, run_config)
+                results.append(r)
+                evt = {**_row(r), "index": i, "total": total}
+                yield f"event: test\ndata: {json.dumps(evt)}\n\n"
+            done = {"mode": req.mode, "selected_tests": total, **_summary(results),
+                    "results": [_row(r) for r in results]}
+            yield f"event: done\ndata: {json.dumps(done)}\n\n"
+
+        return StreamingResponse(_gen(), media_type="text/event-stream")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> HTMLResponse:

@@ -171,6 +171,87 @@ def test_estimate_cost_is_pure_arithmetic():
     assert cost["estimated_tokens"] == cost["prompt_tokens"] + cost["response_tokens"]
 
 
+# ── CORS ───────────────────────────────────────────────────────────────────
+def test_cors_headers_present(client):
+    """The dashboard / React dev server call cross-origin, so CORS must be on."""
+    r = client.get("/health", headers={"Origin": "http://localhost:5173"})
+    assert r.status_code == 200
+    assert r.headers.get("access-control-allow-origin") == "*"
+
+
+# ── live /scan (engine mocked → no network) ────────────────────────────────
+def _fake_refusal(config, test):
+    """Stand-in for engine.run_test: always returns a clean refusal."""
+    return {"verdict": "OK", "response_text": "I can't help with that request.",
+            "status_code": 200, "latency_ms": 1}
+
+
+def test_scan_live_returns_enriched_summary(client, monkeypatch):
+    monkeypatch.setattr(server.engine, "run_test", _fake_refusal)
+    r = client.post("/scan", json={
+        "mode": "policy", "dry_run": False, "limit": 3,
+        "config": {"endpoint": "http://mock.local", "schema": "openai", "model": "m"},
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["dry_run"] is False
+    assert body["selected_tests"] == 3
+    # enriched summary blocks are all present
+    for key in ("scores", "asr", "coverage", "owasp", "guardrails", "results"):
+        assert key in body
+    assert body["scores"]["totals"]["pass"] == 3          # all refusals → PASS
+    assert body["asr"]["n"] == 3 and body["asr"]["asr"] == 0.0
+    assert body["coverage"]["total"] == 14                # Llama-Guard S1..S14
+    assert len(body["results"]) == 3
+
+
+# ── /scan/stream (SSE) ─────────────────────────────────────────────────────
+def test_scan_stream_requires_live_config(client):
+    # dry_run True → streaming is rejected (nothing to stream)
+    r = client.post("/scan/stream", json={"mode": "vapt", "dry_run": True})
+    assert r.status_code == 400
+    # dry_run False but no endpoint → also rejected
+    r2 = client.post("/scan/stream", json={
+        "mode": "vapt", "dry_run": False, "config": {"endpoint": ""}})
+    assert r2.status_code == 400
+
+
+def test_scan_stream_emits_test_and_done_events(client, monkeypatch):
+    monkeypatch.setattr(server.engine, "run_test", _fake_refusal)
+    r = client.post("/scan/stream", json={
+        "mode": "policy", "dry_run": False, "limit": 2,
+        "config": {"endpoint": "http://mock.local", "schema": "openai", "model": "m"},
+    })
+    assert r.status_code == 200
+    assert "text/event-stream" in r.headers["content-type"]
+    body = r.text
+    assert body.count("event: test") == 2      # one per test
+    assert body.count("event: done") == 1       # single final summary
+    # the done payload carries the full summary
+    done_blob = body.split("event: done", 1)[1]
+    assert '"scores"' in done_blob and '"asr"' in done_blob and '"guardrails"' in done_blob
+
+
+# ── helper units ───────────────────────────────────────────────────────────
+def test_enrich_populates_framework_tags():
+    enriched = server._enrich([{"id": "X-1", "category": "Test", "severity": "High",
+                                "name": "n", "payload": "p", "expected": "refusal", "tags": []}])
+    assert "atlas_tactic" in enriched[0]      # ATLAS enrichment ran
+
+
+def test_summary_excludes_errors_from_asr_denominator():
+    results = [
+        {"test": {"category": "c", "severity": "High"},
+         "result": {"verdict": "FAIL", "response_text": ""}},
+        {"test": {"category": "c", "severity": "High"},
+         "result": {"verdict": "ERROR", "response_text": ""}},
+    ]
+    s = server._summary(results)
+    # 1 FAIL + 1 ERROR → denominator excludes the ERROR ⇒ n == 1, ASR == 100%
+    assert s["asr"]["n"] == 1
+    assert s["asr"]["asr"] == 100.0
+
+
 def test_run_requires_uvicorn(monkeypatch):
     """server.run() must raise a clear RuntimeError if uvicorn is absent —
     and never at import time."""
