@@ -20,7 +20,7 @@ def test_expanded_modes_registered():
     assert set(EXPANDED_MODE_TESTS) == {
         "mcp", "agentic", "rag", "swarm", "policy", "benign", "obfuscation",
         "multilingual", "multimodal", "memory-poison", "pismith", "authz",
-        "audio", "video"}
+        "audio", "video", "harm"}
 
 
 def test_expected_counts():
