@@ -89,7 +89,7 @@ Mechanical but high-leverage — parallelisable one agent per file.
 | ID | Task | Roadmap # | Effort | Status |
 |----|------|-----------|--------|--------|
 | F1 | `generate_policy_attacks()` — `policy_gen.py` + `--generate-policy --gen-n N` synthesises S1–S14 attacks via the local 27B | #28 | M | ✅ |
-| F2 | React + Vite SPA over the existing FastAPI backend | #25 | L | ⛔ |
+| F2 | Web UI — zero-build dashboard (`web/index.html`) **and** a React + Vite SPA (`frontend/`), both over the FastAPI backend (CORS + SSE live streaming) | #25 | L | ✅ |
 | F3 | Vector-DB-backed semantic corpus (embedding retrieval) | — | L | ⛔ |
 | F4 | Browser `--browser-target` named presets (NOT credential login — ToS) | #23 | M | ⟳ |
 
