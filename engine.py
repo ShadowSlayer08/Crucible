@@ -267,7 +267,7 @@ def _extract_response(schema: dict, response_json: dict) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_test(config: dict, test: dict, max_retries: int = 3,
-             image_b64: str = None) -> dict:
+             image_b64: str = None, audio_b64: str = None, video_frames=None) -> dict:
     schema_name = config.get("schema", "openai")
     schema = get_schema(schema_name)
 
@@ -287,15 +287,20 @@ def run_test(config: dict, test: dict, max_retries: int = 3,
     headers = _resolve_headers(schema, config)
     body    = _resolve_body(schema, config, message)
 
-    # ── Multimodal: replace the text content with a provider-correct image block ──
-    if image_b64:
+    # ── Multimodal: replace the text content with a provider-correct media block ──
+    if image_b64 or audio_b64 or video_frames:
         try:
             import multimodal
-            content = multimodal.build_image_message(schema_name, message, image_b64)
+            if audio_b64:
+                content = multimodal.build_audio_message(schema_name, message, audio_b64)
+            elif video_frames:
+                content = multimodal.build_video_message(schema_name, message, video_frames)
+            else:
+                content = multimodal.build_image_message(schema_name, message, image_b64)
             if isinstance(body.get("messages"), list) and body["messages"]:
                 body["messages"][0]["content"] = content
         except Exception:
-            pass  # unsupported schema / bad image → fall back to text-only body
+            pass  # unsupported schema / bad media → fall back to text-only body
 
     attempt = 0
     while attempt < max_retries:

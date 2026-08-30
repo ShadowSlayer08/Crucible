@@ -47,3 +47,4 @@ Thumbs.db
 
 # Local Claude Code settings (user-specific)
 .claude/settings.local.json
+.crucible-targets.yaml
