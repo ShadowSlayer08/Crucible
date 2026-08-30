@@ -48,3 +48,4 @@ Thumbs.db
 # Local Claude Code settings (user-specific)
 .claude/settings.local.json
 .ai-redteam-targets.yaml
+.ai-redteam-cache.db
