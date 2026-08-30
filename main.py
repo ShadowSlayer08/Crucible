@@ -205,6 +205,11 @@ MODE_DESCRIPTIONS = {
         "desc":  "Frame injection, overlays, temporal split — use --modality video.",
         "tests": EXPANDED_MODE_TESTS["video"],
     },
+    "harm": {
+        "label": "Harm Taxonomy Mode  (TUD-ARTS-2023)",
+        "desc":  "One probe per harm category — refusal behaviour across the harm space.",
+        "tests": EXPANDED_MODE_TESTS["harm"],
+    },
     "memory-poison": {
         "label": "Memory Poisoning Mode  (RAG / Knowledge-Base Attacks)",
         "desc":  "False-fact injection, retrieval manipulation, delayed triggers.",
@@ -455,7 +460,7 @@ def build_parser():
         "vapt", "redteam", "payload",
         "mcp", "agentic", "rag", "swarm", "policy", "benign", "obfuscation",
         "multilingual", "multimodal", "memory-poison", "pismith",
-        "rag-long", "defence-audit", "authz", "audio", "video",
+        "rag-long", "defence-audit", "authz", "audio", "video", "harm",
     ])
     # ── Declarative Vuln × Attack composition (roadmap G6) ────────────────────
     p.add_argument("--vuln", metavar="A,B",
