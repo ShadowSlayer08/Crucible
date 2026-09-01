@@ -47,6 +47,7 @@ from datetime import datetime
 import colors as C
 from discover import run_discovery
 from extraction import run_extraction
+import local_engine
 from multiturn import run_multiturn
 from dynamic_engine import (
     AttackerLLM, DynamicRedTeamer,
@@ -61,6 +62,7 @@ from payloads import (
     ATLAS_NEW_TESTS, enrich_test, build_coverage_map,
     EXPANDED_MODE_TESTS, filter_by_language,
 )
+import engine
 from engine import run_test, test_connection, list_schemas, SCHEMAS
 from classifier import classify_response, calculate_score, run_judge
 from reporter import (
@@ -522,6 +524,19 @@ def build_parser():
     p.add_argument("--completion-rate", action="store_true",
                    help="After the run, judge whether each FAIL also completed the user task (CR metric)")
 
+    # ── Phase 6 — local-first / air-gap ───────────────────────────────────────
+    p.add_argument("--local", action="store_true",
+                   help="Run fully local against Ollama (auto-detect localhost:11434, no API key). "
+                        "Sets --schema ollama and picks a local model.")
+    p.add_argument("--local-model", metavar="MODEL",
+                   help="Local model to use with --local (default: auto-pick an available Ollama model)")
+    p.add_argument("--offline", action="store_true",
+                   help="Air-gap mode: block ALL non-local endpoints (implies --local), local resources only")
+    p.add_argument("--judge-local", action="store_true",
+                   help="Route the LLM judge to the local Ollama daemon (free, no rate limits)")
+    p.add_argument("--judge-local-model", metavar="MODEL",
+                   help="Local judge model for --judge-local (default: auto-pick an available Ollama model)")
+
     # ── Stage C — pre-run targeting ───────────────────────────────────────────
     p.add_argument("--profile", choices=["slm", "llm"],
                    help="Target profile: pick a mode set + default --samples for a small/local (slm) or frontier (llm) model")
@@ -903,15 +918,57 @@ def _read_line(prompt: str, default: str = "", secret: bool = False) -> str:
         sys.exit(2)
 
 
+def _apply_local(args) -> None:
+    """--local / --offline: point the run at the local Ollama daemon (and, for
+    offline, forbid any external endpoint). Mutates args in place BEFORE any config
+    is built, so it applies to the main run and every early-exit handler alike."""
+    if not (getattr(args, "local", False) or getattr(args, "offline", False)):
+        return
+    offline = getattr(args, "offline", False)
+    eng = local_engine.LocalLLMEngine()
+    if not getattr(args, "endpoint", None):
+        args.endpoint = local_engine.DEFAULT_HOST
+    args.schema = "ollama"
+    prefer = getattr(args, "local_model", None) or (
+        args.model if getattr(args, "model", None) and args.model != "gpt-4o" else None)
+    reachable = eng.is_available()
+    args.model = eng.pick_model(prefer) if reachable else (prefer or local_engine.DEFAULT_LOCAL_MODEL)
+    if offline:
+        args.judge_local = True   # air-gap: judge must be local too
+        engine.set_offline(True)
+
+    hw = local_engine.detect_hardware()
+    banner = "OFFLINE" if offline else "LOCAL"
+    print(f"\n  {C.CYAN('◈ ' + banner + ' MODE')}  —  Ollama @ {args.endpoint}  "
+          f"model={C.BOLD(args.model)}")
+    gpu = f"{hw['gpu_vram_gb']}GB GPU" if hw.get("gpu") else "CPU-only"
+    print(f"  {C.DIM('Hardware:')} {hw['cpu_cores']} cores · {hw.get('ram_gb') or '?'}GB RAM · {gpu}")
+    if not reachable:
+        print(f"  {C.YELLOW('⚠ Ollama not reachable')} at {args.endpoint} — start it with "
+              f"`ollama serve` (and `ollama pull {args.model}`).")
+    if offline and not local_engine.is_local_endpoint(args.endpoint):
+        print(f"  {C.RED('--offline requires a local endpoint')} (got {args.endpoint}).\n")
+        sys.exit(1)
+    print()
+
+
 def _build_judge_config(args, base_config: dict) -> dict | None:
     """Return a config dict for the judge model, or None to reuse base_config."""
     j_endpoint = getattr(args, "judge_endpoint", None)
     j_api_key  = getattr(args, "judge_api_key",  None)
     j_model    = getattr(args, "judge_model",    None)
     j_schema   = getattr(args, "judge_schema",   None)
-    if not any([j_endpoint, j_api_key, j_model, j_schema]):
+    j_local    = getattr(args, "judge_local",    False)
+    if not any([j_endpoint, j_api_key, j_model, j_schema, j_local]):
         return None
     cfg = dict(base_config)
+    if j_local:  # route the judge to the local Ollama daemon
+        base_ep = base_config.get("endpoint", "")
+        cfg["endpoint"] = base_ep if local_engine.is_local_endpoint(base_ep) else local_engine.DEFAULT_HOST
+        cfg["schema"]   = "ollama"
+        cfg["api_key"]  = ""
+        cfg["model"]    = getattr(args, "judge_local_model", None) or \
+            local_engine.LocalLLMEngine().pick_model(getattr(args, "judge_local_model", None))
     if j_endpoint: cfg["endpoint"] = j_endpoint
     if j_api_key:  cfg["api_key"]  = j_api_key
     if j_model:    cfg["model"]    = j_model
@@ -1450,7 +1507,7 @@ def run_retry_mode(args) -> None:
     retry_tests = [_reconstruct_test(e) for e in failed_entries]
     n           = len(retry_tests)
     all_retry_ids = [t["id"] for t in retry_tests]
-    use_judge   = getattr(args, "judge", False)
+    use_judge   = getattr(args, "judge", False) or getattr(args, "judge_local", False)
     judge_config = _build_judge_config(args, config)
 
     print(f"  {'':3} {'Verdict':<10} {'ID':<12} {'Severity':<12} Name")
@@ -1627,6 +1684,9 @@ def run(args):
     if getattr(args, "seed", None) is not None:
         import random
         random.seed(args.seed)
+
+    # ── --local / --offline: normalise to the local Ollama daemon (air-gap) ───
+    _apply_local(args)
 
     # ── Saved target profiles (before anything reads endpoint/model/schema) ───
     if getattr(args, "list_targets", False):
@@ -1948,7 +2008,7 @@ def run(args):
     ci_mode          = args.ci
     ci_threshold     = max(0, min(100, args.ci_threshold))
     ci_warn_threshold= getattr(args, "ci_warn_threshold", None)
-    use_judge        = getattr(args, "judge", False)
+    use_judge        = getattr(args, "judge", False) or getattr(args, "judge_local", False)
     use_anonymize    = getattr(args, "anonymize", False)
 
     # Emoji badges: on when color is enabled and stdout is a TTY
