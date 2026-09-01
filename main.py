@@ -471,6 +471,9 @@ def build_parser():
                    help="List available --vuln and --attack names, then exit")
     p.add_argument("--eval-classifier", action="store_true",
                    help="Measure the verdict classifier against a labelled gold set (precision/recall/F1), then exit")
+    p.add_argument("--model-scan", metavar="PATH",
+                   help="Static supply-chain scan of a model file/dir (pickle deserialization "
+                        "risk, ATLAS AML.T0010) — never loads the artifact; exits 1 if dangerous")
     p.add_argument("--api-key")
     p.add_argument("--endpoint")
     p.add_argument("--model",  default="gpt-4o")
@@ -1661,6 +1664,22 @@ def run(args):
         import classifier_eval
         classifier_eval.print_classifier_eval()
         sys.exit(0)
+
+    # ── --model-scan: static supply-chain scan of a model artifact, then exit ─
+    if getattr(args, "model_scan", None):
+        import modelscan
+        report = modelscan.scan_path(args.model_scan)
+        modelscan.print_model_scan_report(report)
+        if not getattr(args, "no_save", False):
+            out = os.path.join(getattr(args, "output_dir", ".") or ".",
+                               "model_scan.json")
+            try:
+                with open(out, "w", encoding="utf-8") as f:
+                    json.dump(modelscan.report_to_dict(report), f, indent=2)
+                print(f"  {C.DIM('JSON →')} {out}\n")
+            except OSError:
+                pass
+        sys.exit(1 if report.is_dangerous else 0)
 
     # ── --clear-cache: wipe the response cache, then exit ─────────────────────
     if getattr(args, "clear_cache", False):

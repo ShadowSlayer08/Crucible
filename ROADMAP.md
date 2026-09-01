@@ -93,6 +93,13 @@ Mechanical but high-leverage — parallelisable one agent per file.
 | F3 | Vector-DB-backed semantic corpus (embedding retrieval) | — | L | ⛔ |
 | F4 | Browser `--browser-target` named presets (NOT credential login — ToS) | #23 | M | ⟳ |
 
+## Stage G — Beyond-roadmap hardening  *(net-new attack surface)*
+
+| ID | Task | Effort | Status |
+|----|------|--------|--------|
+| G1 | Agentic **Planning Manipulation** category (AGT-025..030: plan injection, objective drift, loop DoS, feedback-loop poisoning, plan-escalation, cascading blast-radius) — closes the audit's agentic divergence | S | ✅ |
+| G2 | `modelscan.py` — model-artifact **supply-chain scanner** (ATLAS AML.T0010): static pickle-opcode inspection for deserialization RCE (`GLOBAL`/`REDUCE` → `os.system`/`eval`/`subprocess`…), torch-zip container walk, `trust_remote_code`/`auto_map` config flags, safetensors safe-by-format. `--model-scan PATH`, exits 1 if dangerous, never loads the artifact. This is the artifact/supply-chain layer nothing else in the tool touched. | M | ✅ |
+
 ---
 
 ## SLM vs LLM Execution Plan (using `hauhaucs-cybersec-27b:latest`)
