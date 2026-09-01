@@ -25,7 +25,7 @@ def test_expanded_modes_registered():
 
 def test_expected_counts():
     assert len(MCP_TESTS) == 25
-    assert len(AGENTIC_TESTS) == 24
+    assert len(AGENTIC_TESTS) == 30
     assert len(RAG_TESTS) == 25
     assert len(SWARM_TESTS) == 15
     assert len(POLICY_TESTS) == 16
