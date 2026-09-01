@@ -1,0 +1,23 @@
+# ── Phase 6C SLM training stack (slm/train.py, export.py, merge.py) ───────────
+# ONLY needed on the GPU box that fine-tunes the model. The rest of REDai runs
+# without any of this. Install CUDA-enabled PyTorch FIRST (match your CUDA build):
+#   https://pytorch.org/get-started/locally/   e.g. pip install torch --index-url https://download.pytorch.org/whl/cu121
+# Then:  pip install -r requirements-slm.txt
+
+# core fine-tuning (the peft path — works on Linux AND native Windows) ----------
+transformers>=4.44
+peft>=0.12
+trl>=0.9
+accelerate>=0.33
+datasets>=2.20
+bitsandbytes>=0.43        # 4-bit quant; Windows wheels exist (else use WSL2)
+
+# faster + far less VRAM (Linux / WSL2; native-Windows support is limited) ------
+# unsloth                 # pip install unsloth  → 2-4x faster, ~70% less VRAM
+
+# MoE / weight merge (slm/merge.py) --------------------------------------------
+mergekit>=0.0.4
+
+# GGUF export (slm/export.py) also needs llama.cpp (clone + build separately) and
+# Ollama (you already have it) — neither is a pip dependency:
+#   git clone https://github.com/ggerganov/llama.cpp  &&  set LLAMA_CPP_DIR=...
