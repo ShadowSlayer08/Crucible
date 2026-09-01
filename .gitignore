@@ -50,3 +50,6 @@ Thumbs.db
 .ai-redteam-targets.yaml
 .ai-redteam-cache.db
 .ai-redteam-kb/
+slm/training_data/
+slm/checkpoints/
+slm/eval_results/

@@ -178,6 +178,11 @@ class RedTeamKB:
         return bool(top and top[0]["score"] >= threshold)
 
     # ── admin ─────────────────────────────────────────────────────────────────
+    def all(self, collection: str) -> list:
+        """Every doc in a collection as {doc_id, text, metadata} (no scoring)."""
+        return [{"doc_id": did, "text": text, "metadata": json.loads(meta or "{}")}
+                for _c, did, text, meta, _e in self._rows(collection)]
+
     def count(self, collection: str = None) -> int:
         if collection:
             return self._conn.execute(
