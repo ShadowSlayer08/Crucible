@@ -49,3 +49,4 @@ Thumbs.db
 .claude/settings.local.json
 .crucible-targets.yaml
 .crucible-cache.db
+.crucible-kb/

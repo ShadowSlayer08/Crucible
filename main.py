@@ -48,6 +48,7 @@ import colors as C
 from discover import run_discovery
 from extraction import run_extraction
 import local_engine
+import kb as kb_mod
 from multiturn import run_multiturn
 from dynamic_engine import (
     AttackerLLM, DynamicRedTeamer,
@@ -537,6 +538,26 @@ def build_parser():
     p.add_argument("--judge-local-model", metavar="MODEL",
                    help="Local judge model for --judge-local (default: auto-pick an available Ollama model)")
 
+    # ── Phase 6B — self-growing knowledge base ────────────────────────────────
+    p.add_argument("--kb-dir", metavar="DIR", default=kb_mod.DEFAULT_DIR,
+                   help="Knowledge-base directory (default: .crucible-kb)")
+    p.add_argument("--kb-augmented", action="store_true",
+                   help="Dynamic mode: retrieve proven attacks from the KB to craft custom payloads")
+    p.add_argument("--kb-grow", action="store_true",
+                   help="Dynamic mode: write high-confidence winning attacks back into the KB")
+    p.add_argument("--kb-grow-threshold", type=float, default=0.5, metavar="F",
+                   help="Min classifier confidence (0-1) for a winning attack to enter the KB (default 0.5)")
+    p.add_argument("--evolve", action="store_true",
+                   help="Self-improving loop: --dynamic + --kb-augmented + --kb-grow (seed→attack→grow)")
+    p.add_argument("--kb-seed", action="store_true",
+                   help="Seed the KB from the static payload suites + ATLAS/OWASP, then exit")
+    p.add_argument("--kb-stats", action="store_true",
+                   help="Print knowledge-base statistics, then exit")
+    p.add_argument("--kb-search", metavar="QUERY",
+                   help="Semantic search the KB attack corpus, then exit")
+    p.add_argument("--kb-reset", action="store_true",
+                   help="Wipe the knowledge base, then exit")
+
     # ── Stage C — pre-run targeting ───────────────────────────────────────────
     p.add_argument("--profile", choices=["slm", "llm"],
                    help="Target profile: pick a mode set + default --samples for a small/local (slm) or frontier (llm) model")
@@ -950,6 +971,18 @@ def _apply_local(args) -> None:
         print(f"  {C.RED('--offline requires a local endpoint')} (got {args.endpoint}).\n")
         sys.exit(1)
     print()
+
+
+def _open_kb(args, seed_if_empty: bool = True):
+    """Open the knowledge base, auto-seeding from the static suites on first use."""
+    kb = kb_mod.RedTeamKB(persist_dir=getattr(args, "kb_dir", kb_mod.DEFAULT_DIR))
+    if seed_if_empty and kb.count("attack_patterns") == 0:
+        stats = kb_mod.seed_all(kb)
+        mode = "bge-m3" if kb.semantic else "lexical"
+        print(f"  {C.CYAN('◈ KB seeded')} from static suites: {stats['attack_patterns']} "
+              f"attacks + {stats.get('mitre_atlas', 0)} ATLAS + {stats.get('owasp_llm', 0)} OWASP "
+              f"{C.DIM('(' + mode + ')')}")
+    return kb
 
 
 def _build_judge_config(args, base_config: dict) -> dict | None:
@@ -1687,6 +1720,51 @@ def run(args):
 
     # ── --local / --offline: normalise to the local Ollama daemon (air-gap) ───
     _apply_local(args)
+
+    # ── --evolve: the self-improving loop = dynamic + KB-augment + KB-grow ────
+    if getattr(args, "evolve", False):
+        args.dynamic = True
+        args.kb_augmented = True
+        args.kb_grow = True
+
+    # ── Knowledge-base admin (Phase 6B), then exit ────────────────────────────
+    if getattr(args, "kb_reset", False):
+        kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
+        kb.reset()
+        print(f"  {C.GREEN('✓')} Knowledge base wiped ({kb.db_path}).\n")
+        sys.exit(0)
+    if getattr(args, "kb_seed", False):
+        kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
+        stats = kb_mod.seed_all(kb)
+        print(f"\n  {C.BOLD('◈ KB SEEDED')}  ({kb.db_path})")
+        print(f"    attack_patterns : {stats['attack_patterns']}")
+        print(f"    mitre_atlas     : {stats.get('mitre_atlas', 0)}")
+        print(f"    owasp_llm       : {stats.get('owasp_llm', 0)}")
+        print(f"    search mode     : {'semantic (bge-m3)' if kb.semantic else 'lexical'}\n")
+        sys.exit(0)
+    if getattr(args, "kb_stats", False):
+        kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
+        st = kb.get_stats()
+        print(f"\n  {C.BOLD('◈ KNOWLEDGE BASE')}  ({st['path']})")
+        print(f"    total docs : {st['total']}   search: "
+              f"{'semantic' if st['semantic'] else 'lexical'}")
+        for c, n in sorted(st["collections"].items()):
+            print(f"    {c:<16}: {n}")
+        print()
+        sys.exit(0)
+    if getattr(args, "kb_search", None):
+        kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
+        if kb.count("attack_patterns") == 0:
+            kb_mod.seed_all(kb)
+        hits = kb.query("attack_patterns", args.kb_search, n=8)
+        mode = "semantic" if kb.semantic else "lexical"
+        print(f"\n  {C.BOLD('◈ KB SEARCH')}  \"{args.kb_search}\"  {C.DIM('(' + mode + ')')}")
+        for h in hits:
+            m = h["metadata"]
+            print(f"    {h['score']:.3f}  {C.CYAN(m.get('id', '?'))}  "
+                  f"{m.get('name') or h['text'][:60]}")
+        print()
+        sys.exit(0)
 
     # ── Saved target profiles (before anything reads endpoint/model/schema) ───
     if getattr(args, "list_targets", False):
@@ -2677,11 +2755,23 @@ def run(args):
         else:
             print(f"  {C.GREEN('✓')} {ping_msg}")
 
+            dyn_kb = None
+            if getattr(args, "kb_augmented", False) or getattr(args, "kb_grow", False):
+                dyn_kb = _open_kb(args)
+                print(f"  {C.CYAN('◈ KB')}: {dyn_kb.count('attack_patterns')} patterns"
+                      + ("  |  augmented-gen" if getattr(args, 'kb_augmented', False) else "")
+                      + ("  |  grow≥" + str(getattr(args, 'kb_grow_threshold', 0.5))
+                         if getattr(args, 'kb_grow', False) else "") + "\n")
+
             drt = DynamicRedTeamer(
                 attacker      = attacker,
                 target_config = config,
                 max_rounds    = dynamic_rounds,
                 use_llm_judge = dyn_judge,
+                kb            = dyn_kb,
+                kb_augment    = getattr(args, "kb_augmented", False),
+                kb_grow       = getattr(args, "kb_grow", False),
+                grow_threshold= getattr(args, "kb_grow_threshold", 0.5),
             )
 
             dyn_results = drt.run_suite(
@@ -2691,6 +2781,10 @@ def run(args):
             )
 
             print_dynamic_report(dyn_results, attacker_model)
+            if dyn_kb is not None and getattr(args, "kb_grow", False):
+                print(f"  {C.GREEN('◈ KB grew')}: +{drt.grown} winning attack(s) → "
+                      f"{dyn_kb.count('attack_patterns')} patterns "
+                      f"{C.DIM('(the corpus compounds each run)')}")
 
             if not args.no_save:
                 os.makedirs(args.output_dir, exist_ok=True)
