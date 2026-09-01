@@ -99,6 +99,7 @@ Mechanical but high-leverage — parallelisable one agent per file.
 |----|------|--------|--------|
 | G1 | Agentic **Planning Manipulation** category (AGT-025..030: plan injection, objective drift, loop DoS, feedback-loop poisoning, plan-escalation, cascading blast-radius) — closes the audit's agentic divergence | S | ✅ |
 | G2 | `modelscan.py` — model-artifact **supply-chain scanner** (ATLAS AML.T0010): static pickle-opcode inspection for deserialization RCE (`GLOBAL`/`REDUCE` → `os.system`/`eval`/`subprocess`…), torch-zip container walk, `trust_remote_code`/`auto_map` config flags, safetensors safe-by-format. `--model-scan PATH`, exits 1 if dangerous, never loads the artifact. This is the artifact/supply-chain layer nothing else in the tool touched. | M | ✅ |
+| G3 | **Model-stealing** — behavioural suite `payloads/model_stealing.py` (`--mode model-theft`, MS-001..012: extraction / inversion / membership) **and** the active multi-query engine `extraction.py` (`--extract`): decoding-determinism fingerprint (clone-feasibility), system-prompt/param exfiltration, training-data inversion (verbatim/PII/secret recall + PII scan), and a membership recognition-gap test (Mann-Whitney AUC over member-vs-control verbatim overlap). ATLAS AML.T0024/T0018, OWASP LLM10/LLM06. Validated live on qwen2.5:7b (membership WEAK, AUC 0.72 — real memorization detected). | L | ✅ |
 
 ---
 

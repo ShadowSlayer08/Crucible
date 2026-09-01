@@ -25,6 +25,7 @@ from .authz import AUTHZ_TESTS
 from .audio_tests import AUDIO_TESTS
 from .video_tests import VIDEO_TESTS
 from .harm_taxonomy import HARM_TAXONOMY_TESTS
+from .model_stealing import MODEL_STEALING_TESTS
 
 # Maps a --mode name to its static test pool, for the modes that simply run a
 # dedicated suite through the standard pipeline.
@@ -44,6 +45,7 @@ EXPANDED_MODE_TESTS = {
     "audio":        AUDIO_TESTS,
     "video":        VIDEO_TESTS,
     "harm":         HARM_TAXONOMY_TESTS,
+    "model-theft":  MODEL_STEALING_TESTS,
 }
 
 __all__ = [
@@ -56,7 +58,7 @@ __all__ = [
     "POLICY_TESTS", "BENIGN_TESTS", "OBFUSCATION_TESTS",
     "MULTILINGUAL_TESTS", "MULTIMODAL_TESTS",
     "MEMORY_POISON_TESTS", "PISMITH_TESTS", "AUTHZ_TESTS",
-    "AUDIO_TESTS", "VIDEO_TESTS", "HARM_TAXONOMY_TESTS",
+    "AUDIO_TESTS", "VIDEO_TESTS", "HARM_TAXONOMY_TESTS", "MODEL_STEALING_TESTS",
     "available_languages", "filter_by_language",
     "EXPANDED_MODE_TESTS",
 ]

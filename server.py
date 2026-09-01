@@ -78,6 +78,7 @@ MODE_LABELS = {
     "policy":      "Policy — Llama Guard S1-S14 coverage",
     "benign":      "Benign — over-refusal / false-positive probes",
     "obfuscation": "Obfuscation — encoding evasion probes",
+    "model-theft": "Model Theft — extraction / inversion / membership",
 }
 
 

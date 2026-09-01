@@ -46,6 +46,7 @@ from datetime import datetime
 
 import colors as C
 from discover import run_discovery
+from extraction import run_extraction
 from multiturn import run_multiturn
 from dynamic_engine import (
     AttackerLLM, DynamicRedTeamer,
@@ -239,6 +240,11 @@ MODE_DESCRIPTIONS = {
         "label": "Defence Audit Mode  (Utility vs Robustness)",
         "desc":  "Fire attacks + benign controls at a defended endpoint (--defence-endpoint).",
         "tests": EXPANDED_MODE_TESTS["rag"],
+    },
+    "model-theft": {
+        "label": "Model-Theft Mode  (Extraction / Inversion / Membership)",
+        "desc":  "Query-based model stealing — see --extract for the active multi-query engine.",
+        "tests": EXPANDED_MODE_TESTS["model-theft"],
     },
 }
 
@@ -461,6 +467,7 @@ def build_parser():
         "mcp", "agentic", "rag", "swarm", "policy", "benign", "obfuscation",
         "multilingual", "multimodal", "memory-poison", "pismith",
         "rag-long", "defence-audit", "authz", "audio", "video", "harm",
+        "model-theft",
     ])
     # ── Declarative Vuln × Attack composition (roadmap G6) ────────────────────
     p.add_argument("--vuln", metavar="A,B",
@@ -750,6 +757,17 @@ def build_parser():
                         "--schema based on detected identity, and saves "
                         "discovery_<timestamp>.json in --output-dir. "
                         "Requires --endpoint (and --api-key unless ollama).")
+
+    # ── NEW: active model-stealing engine ─────────────────────────────────────
+    p.add_argument("--extract", action="store_true",
+                   help="Run the active model-stealing engine: decoding-determinism "
+                        "fingerprint (extraction feasibility), system-prompt/parameter "
+                        "exfiltration, training-data inversion (verbatim/PII/secret "
+                        "recall) and a membership recognition-gap test. Prints a "
+                        "MODEL-STEALING RISK SUMMARY and saves extraction_<timestamp>.json. "
+                        "Requires --endpoint (and --api-key unless ollama).")
+    p.add_argument("--extract-samples", type=int, default=5, metavar="N",
+                   help="Identical queries for the determinism fingerprint (default 5).")
 
     # ── NEW: multi-turn ───────────────────────────────────────────────────────
     p.add_argument("--multi-turn", action="store_true",
@@ -1812,6 +1830,40 @@ def run(args):
             skip_connection_test=getattr(args, "skip_connection_test", False),
         )
         sys.exit(0)
+
+    # ── --extract: active model-stealing engine, then exit ────────────────────
+    if getattr(args, "extract", False):
+        api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
+        endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
+        schema   = args.schema or "openai"
+
+        if not endpoint:
+            hint     = "http://localhost:11434" if schema == "ollama" else "https://api.openai.com"
+            endpoint = _read_line(f"  Enter endpoint [{hint}]: ", default=hint)
+        if not api_key and schema != "ollama":
+            api_key = _read_line("  Enter API key: ", secret=True)
+
+        config = {
+            "api_key":       api_key or "",
+            "endpoint":      endpoint.rstrip("/"),
+            "model":         args.model,
+            "schema":        schema,
+            "extra_headers": {},
+        }
+        if args.extra_headers:
+            for hdr in args.extra_headers:
+                if ":" in hdr:
+                    k, _, v = hdr.partition(":")
+                    config["extra_headers"][k.strip()] = v.strip()
+
+        report = run_extraction(
+            config,
+            output_dir=None if getattr(args, "no_save", False)
+            else getattr(args, "output_dir", "./reports"),
+            skip_connection_test=getattr(args, "skip_connection_test", False),
+            determinism_samples=getattr(args, "extract_samples", 5),
+        )
+        sys.exit(1 if report and report["overall_risk_score"] >= 45 else 0)
 
     # ── --multi-turn: adversarial conversation scenarios, then exit ───────────
     if getattr(args, "multi_turn", False):
