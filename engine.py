@@ -266,6 +266,22 @@ def _extract_response(schema: dict, response_json: dict) -> str:
 # CORE
 # ─────────────────────────────────────────────────────────────────────────────
 
+# ── Offline / air-gap enforcement (Phase 6, --offline) ────────────────────────
+_OFFLINE = False
+
+
+def set_offline(flag: bool = True) -> None:
+    """Enable air-gap enforcement: run_test refuses any non-local endpoint."""
+    global _OFFLINE
+    _OFFLINE = bool(flag)
+
+
+def _is_local_url(url: str) -> bool:
+    u = (url or "").lower()
+    return any(h in u for h in
+               ("localhost", "127.0.0.1", "0.0.0.0", "[::1]", "host.docker.internal"))
+
+
 def run_test(config: dict, test: dict, max_retries: int = 3,
              image_b64: str = None, audio_b64: str = None, video_frames=None) -> dict:
     schema_name = config.get("schema", "openai")
@@ -284,6 +300,11 @@ def run_test(config: dict, test: dict, max_retries: int = 3,
 
     message = test.get("payload", "").strip() or " "
     url     = _resolve_url(schema, config)
+    # Air-gap guard: in offline mode, refuse any endpoint that isn't local.
+    if _OFFLINE and schema_name != "browser" and not _is_local_url(url):
+        return {"verdict": "ERROR", "response_text": "", "raw_response": None,
+                "status_code": 0,
+                "error": f"offline mode: blocked non-local endpoint ({url})"}
     headers = _resolve_headers(schema, config)
     body    = _resolve_body(schema, config, message)
 
