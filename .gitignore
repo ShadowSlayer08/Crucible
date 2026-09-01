@@ -53,3 +53,5 @@ Thumbs.db
 slm/training_data/
 slm/checkpoints/
 slm/eval_results/
+slm/merged/
+slm/versions.sqlite
