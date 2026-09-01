@@ -517,6 +517,8 @@ def build_parser():
                    help="Skip the pre-run stale-payload quality gate")
     p.add_argument("--force-stale", action="store_true",
                    help="Proceed even when the whole selected pool is D-tier (stale) payloads")
+    p.add_argument("--sort-by-tier", action="store_true",
+                   help="Run highest-effectiveness payloads first (Tier A→B→C→D by effectiveness_tier)")
     p.add_argument("--completion-rate", action="store_true",
                    help="After the run, judge whether each FAIL also completed the user task (CR metric)")
 
@@ -526,7 +528,10 @@ def build_parser():
     p.add_argument("--profile-capabilities", action="store_true",
                    help="Fingerprint the target with 5 capability probes before the run")
     p.add_argument("--scope-wizard", action="store_true",
-                   help="Interactive deployment questionnaire → recommended test plan, then exit")
+                   help="Interactive deployment questionnaire → recommended test plan (exits unless --yes)")
+    p.add_argument("--yes", "--yes-all", action="store_true", dest="assume_yes",
+                   help="Non-interactive: with --scope-wizard, skip the questions and run the "
+                        "recommended core battery instead of just printing the plan")
     p.add_argument("--optimize-length", action="store_true",
                    help="Pad/trim payloads toward the 80-180 token sweet spot (Pathade 2025)")
 
@@ -1749,12 +1754,22 @@ def run(args):
         vector_poison.print_vector_poison_report(_ev)
         sys.exit(0)
 
-    # ── --scope-wizard: deployment questionnaire → recommended plan, then exit ─
+    # ── --scope-wizard: deployment questionnaire → recommended plan ───────────
     if getattr(args, "scope_wizard", False):
-        answers = scope_wizard.run_wizard()
+        assume_yes = getattr(args, "assume_yes", False)
+        if assume_yes:
+            # Non-interactive: take the safe default answer for each question.
+            answers = {q["key"]: q["options"][0] for q in scope_wizard.SCOPE_QUESTIONS}
+        else:
+            answers = scope_wizard.run_wizard()
         modes = scope_wizard.recommend_modes(answers)
         scope_wizard.print_test_plan(answers, modes)
-        sys.exit(0)
+        if not assume_yes:
+            sys.exit(0)
+        # --yes: flow into a real run using the primary recommended mode.
+        args.mode = modes[0] if modes else "redteam"
+        print(f"  {C.CYAN('◈ --yes')}: proceeding with {C.BOLD('--mode ' + args.mode)}  "
+              f"{C.DIM('(other recommended modes: ' + (', '.join(modes[1:]) or 'none') + ')')}\n")
 
     # ── --serve: launch the FastAPI REST server + dashboard, then exit ─────────
     if getattr(args, "serve", False):
@@ -2080,6 +2095,13 @@ def run(args):
     if not tests:
         print(f"  {C.RED('No tests match filters.')}\n")
         sys.exit(1)
+
+    # ── --sort-by-tier: run highest-effectiveness (Tier A) payloads first ─────
+    if getattr(args, "sort_by_tier", False):
+        _tier_rank = {"A": 0, "B": 1, "C": 2, "D": 3}
+        tests = sorted(tests, key=lambda t: _tier_rank.get(
+            str(t.get("effectiveness_tier", "")).upper(), 4))
+        print(f"  {C.CYAN('◈ Sorted by effectiveness tier')} (A→D)")
 
     # ── Source-quality gate (roadmap #48): block runs on entirely-stale pools ──
     if not getattr(args, "skip_source_audit", False):
@@ -2416,7 +2438,19 @@ def run(args):
         print(f"  Mean fidelity      : {C.CYAN(str(m['mean_fidelity']))}  "
               f"{C.DIM('(naturalness proxy, 0-1)')}")
         print(f"  Mean stealthiness  : {C.CYAN(str(m['mean_stealth']))}  "
-              f"{C.DIM('(filter-evasion likelihood, 0-1)')}\n")
+              f"{C.DIM('(filter-evasion likelihood, 0-1)')}")
+        # Top stealthy attacks — evasive payloads that ALSO beat the model.
+        stealthy = metrics_mod.most_stealthy_attacks(results, top_n=5)
+        if stealthy:
+            print(f"\n  {C.BOLD('◈ MOST STEALTHY ATTACKS')}  {C.DIM('(evade filters + bypass model)')}")
+            for s in stealthy:
+                rcol = (C.RED if s["rating"] == "HIGH"
+                        else (C.YELLOW if s["rating"] == "MEDIUM" else C.DIM))
+                rating = rcol(f"{s['rating']:<6}")
+                sig = C.DIM(f"  [{', '.join(s['signals'])}]") if s["signals"] else ""
+                print(f"    {rating} {s['stealth']:>5}  "
+                      f"{C.CYAN(str(s['id']))} {s['name']}{sig}")
+        print()
 
     if getattr(args, "compliance", False):
         compliance.print_compliance_report(results)

@@ -2,10 +2,11 @@
 import trend
 
 
-def _scores(score, fail=0, warn=0, error=0, npass=0):
+def _scores(score, fail=0, warn=0, error=0, npass=0, silent=0):
     return {
         "overall_risk_score": score, "risk_level": "HIGH" if score >= 45 else "LOW",
-        "totals": {"pass": npass, "fail": fail, "warn": warn, "error": error},
+        "totals": {"pass": npass, "fail": fail, "warn": warn, "error": error,
+                   "silent": silent},
     }
 
 
@@ -56,3 +57,38 @@ def test_save_run_never_raises_on_bad_path():
     # An unwritable path must not crash a run — history is best-effort.
     assert trend.save_run(_cfg(), "vapt", _scores(10),
                           db_path="/nonexistent-dir-xyz/sub/h.db") is None
+
+
+# ── SILENT persistence (roadmap #38) ─────────────────────────────────────────
+def test_silent_count_persisted(tmp_path):
+    db = str(tmp_path / "h.db")
+    trend.save_run(_cfg(), "policy", _scores(30, fail=2, silent=4), db_path=db)
+    row = trend.get_history(db, limit=1)[0]
+    assert row["n_silent"] == 4
+    # total counts every evaluated verdict incl. silent
+    assert row["total"] == row["n_pass"] + row["n_fail"] + row["n_warn"] \
+        + row["n_error"] + row["n_silent"]
+
+
+def test_export_history_includes_silent_column(tmp_path):
+    db = str(tmp_path / "h.db")
+    trend.save_run(_cfg(), "vapt", _scores(20, silent=3), db_path=db)
+    out = str(tmp_path / "hist.csv")
+    trend.export_history_csv(out, db_path=db)
+    header = open(out, encoding="utf-8").readline()
+    assert "n_silent" in header
+
+
+def test_migration_adds_silent_column_to_old_db(tmp_path):
+    # Simulate a pre-#38 DB: a runs table with no n_silent column.
+    import sqlite3
+    db = str(tmp_path / "old.db")
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                 "timestamp TEXT, mode TEXT, schema TEXT, model TEXT, endpoint_hash TEXT, "
+                 "score INTEGER, risk_level TEXT, n_pass INTEGER, n_fail INTEGER, "
+                 "n_warn INTEGER, n_error INTEGER, total INTEGER, framework TEXT, duration REAL)")
+    conn.commit(); conn.close()
+    # save_run must migrate the schema in place and persist without raising.
+    assert trend.save_run(_cfg(), "vapt", _scores(10, silent=2), db_path=db) is not None
+    assert trend.get_history(db, limit=1)[0]["n_silent"] == 2

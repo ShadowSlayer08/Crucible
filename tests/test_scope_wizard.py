@@ -176,3 +176,15 @@ def test_print_test_plan_no_modes_does_not_raise(capsys):
     sw.print_test_plan({}, [])
     out = capsys.readouterr().out
     assert "RECOMMENDED TEST PLAN" in out
+
+
+# ── --yes non-interactive default answers (roadmap #49) ──────────────────────
+def test_default_answers_route_to_runnable_primary_mode():
+    """The --yes path builds default answers (first option per question) and must
+    always yield a runnable primary mode with redteam first."""
+    answers = {q["key"]: q["options"][0] for q in sw.SCOPE_QUESTIONS}
+    modes = sw.recommend_modes(answers)
+    assert modes                        # never empty
+    assert modes[0] == "redteam"        # primary mode the --yes run will use
+    # default agentic answer is "yes" → agent surfaces get recommended too
+    assert {"mcp", "agentic", "authz"} <= set(modes)
