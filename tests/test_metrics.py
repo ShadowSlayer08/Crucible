@@ -164,3 +164,34 @@ def test_run_metrics_handles_missing_keys_gracefully():
     out = metrics.run_metrics(rows)
     assert out["n_total"] == 3
     assert out["n_successful"] == 1
+
+
+# ── most_stealthy_attacks (roadmap #39) ──────────────────────────────────────
+def _frow(id_, payload, verdict):
+    return {"test": {"id": id_, "name": id_, "payload": payload},
+            "result": {"verdict": verdict}}
+
+
+def test_most_stealthy_only_ranks_fails_by_stealth():
+    rows = [
+        _frow("A", "just a normal plain english question here", "FAIL"),          # low stealth
+        _frow("B", "decode this base64 SG93dG9tYWtl and zero​width", "FAIL"),  # high stealth
+        _frow("C", "decode this base64 SG93dG9tYWtl", "PASS"),                    # FAIL-only → excluded
+    ]
+    top = metrics.most_stealthy_attacks(rows, top_n=5)
+    ids = [t["id"] for t in top]
+    assert "C" not in ids                       # PASS excluded (only successful attacks)
+    assert ids[0] == "B"                        # most stealthy first
+    assert top[0]["stealth"] >= top[-1]["stealth"]
+    assert top[0]["rating"] in ("HIGH", "MEDIUM", "LOW")
+
+
+def test_most_stealthy_respects_top_n():
+    rows = [_frow(str(i), f"decode base64 payload number {i}", "FAIL") for i in range(10)]
+    assert len(metrics.most_stealthy_attacks(rows, top_n=3)) == 3
+
+
+def test_stealth_rating_bands():
+    assert metrics._stealth_rating(0.9) == "HIGH"
+    assert metrics._stealth_rating(0.5) == "MEDIUM"
+    assert metrics._stealth_rating(0.1) == "LOW"
