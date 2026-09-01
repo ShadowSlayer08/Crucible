@@ -21,6 +21,16 @@ def init(enabled: bool = True):
         _COLOR_ENABLED = enabled
 
 
+def force_utf8() -> None:
+    """Reconfigure stdout/stderr to UTF-8 so box-drawing/emoji output doesn't crash
+    on a Windows cp1252 console. Safe to call from any module entrypoint."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8")  # py3.7+
+        except Exception:
+            pass
+
+
 def _c(text: str, code: str) -> str:
     if not _COLOR_ENABLED:
         return str(text)
