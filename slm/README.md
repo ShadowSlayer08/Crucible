@@ -26,6 +26,8 @@ static payloads ─seed→ KB ─┐
 | Build the Modelfile | `export.build_modelfile_text` | ✅ | |
 | **LoRA fine-tune** | `train.py` | | ✅ torch + unsloth |
 | Merge + GGUF + `ollama create` | `export.py` | | ✅ llama.cpp + ollama |
+| Build the merge config (MoE/weight) | `merge.build_*_config` | ✅ | |
+| **Merge experts → one model** | `merge.py` | | ✅ mergekit + torch |
 
 The training stages are **honest scaffolds**: every heavy import is guarded, and
 they print a clear requirements message + return `{"ok": False, ...}` if torch /
@@ -64,13 +66,26 @@ A/B in step 4 shows a positive Δ ASR. `evaluate.py` produces that number honest
 regressed**. Don't promote a version the A/B doesn't back. Self-improvement loops
 can plateau or mode-collapse; this harness is how you find out.
 
-## Mixture-of-Experts (future, not built)
+## Mixture-of-Experts (`merge.py`)
 
-Combining several per-category adapters into one MoE / merged model (`mergekit`
-SLERP / TIES / DARE, or a router over expert adapters) is the documented next step
-in `train.py` — it is **not** implemented here because it is GPU-bound and, like
-training, cannot be verified in this environment. Build it as `slm/merge.py` when
-you have multiple strong single-category checkpoints to combine.
+When you have several strong per-family SLMs (one trained on each attack family's
+KB winners), `merge.py` builds the mergekit config to fuse them:
+
+```bash
+# MoE: keep each expert whole, route by prompt (a true mixture-of-experts)
+python -m slm.merge --experts redai-slm-inject,redai-slm-jailbreak,redai-slm-rag \
+    --base-model microsoft/Phi-3-mini-4k-instruct --method moe --dry-run   # preview the plan+config
+python -m slm.merge --experts ... --method moe                             # run (needs mergekit + GPU)
+
+# or a weight merge (SLERP / TIES / DARE / linear / task_arithmetic)
+python -m slm.merge --experts a,b,c --method ties
+python -m slm.merge --check-env                                            # probe mergekit/torch first
+```
+
+Config building / rendering / routing is **pure and unit-tested** here; the merge
+itself is GPU-bound (mergekit + torch) and, like training, is **not** run in this
+repo. After a merge: `export.py` → GGUF/Ollama, then `evaluate.py` to confirm the
+merged model actually out-attacks its parts before you promote it.
 
 > Scope note: the attacker/SLM generates adversarial **test probes** — the jailbreak
 > *attempts* a red-teamer sends to measure a target's safety — not weaponizable
