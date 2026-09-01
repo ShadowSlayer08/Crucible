@@ -50,3 +50,6 @@ Thumbs.db
 .crucible-targets.yaml
 .crucible-cache.db
 .crucible-kb/
+slm/training_data/
+slm/checkpoints/
+slm/eval_results/

@@ -557,6 +557,8 @@ def build_parser():
                    help="Semantic search the KB attack corpus, then exit")
     p.add_argument("--kb-reset", action="store_true",
                    help="Wipe the knowledge base, then exit")
+    p.add_argument("--slm-collect", action="store_true",
+                   help="Snapshot the KB's winning attacks into SLM training data (JSONL), then exit")
 
     # ── Stage C — pre-run targeting ───────────────────────────────────────────
     p.add_argument("--profile", choices=["slm", "llm"],
@@ -1763,6 +1765,18 @@ def run(args):
             m = h["metadata"]
             print(f"    {h['score']:.3f}  {C.CYAN(m.get('id', '?'))}  "
                   f"{m.get('name') or h['text'][:60]}")
+        print()
+        sys.exit(0)
+    if getattr(args, "slm_collect", False):
+        import slm as slm_mod
+        kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
+        info = slm_mod.collect(kb=kb, min_confidence=getattr(args, "kb_grow_threshold", 0.5))
+        print(f"\n  {C.BOLD('◈ SLM DATASET')}  ({info['path']})")
+        print(f"    examples written : {info['written']}")
+        for t, n in sorted(info["by_type"].items()):
+            print(f"    {t:<8}: {n}")
+        if info["written"] == 0:
+            print(f"    {C.DIM('No dynamic-win patterns yet — run --evolve to grow the KB first.')}")
         print()
         sys.exit(0)
 
