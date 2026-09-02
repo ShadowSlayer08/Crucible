@@ -33,16 +33,24 @@ def test_split_holdout_deterministic():
     assert train.split_holdout(data, frac=0.1, seed=7)[1] == val  # deterministic
 
 
-def test_check_env_reports_no_torch_gracefully():
+def test_check_env_wellformed(monkeypatch):
+    # Environment-agnostic: check_env returns a clean dict and never raises. When
+    # torch is present it may report ok; ok must never be True without torch.
     env = train.check_env()
-    assert env["ok"] is False and "torch" in env["missing"]
+    assert isinstance(env, dict)
+    assert isinstance(env["ok"], bool) and isinstance(env["missing"], list)
+    assert (not env["ok"]) or env.get("torch") is True
+    # Force the no-torch view and confirm it degrades cleanly.
+    import importlib
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    env2 = train.check_env()
+    assert env2["ok"] is False and "torch" in env2["missing"]
 
 
-def test_train_without_gpu_returns_not_ok(tmp_path):
-    p = tmp_path / "d.jsonl"
-    p.write_text(json.dumps({"instruction": "i", "output": "o"}) + "\n", encoding="utf-8")
-    out = train.train(dataset_path=str(p), out_dir=str(tmp_path / "ck"))
-    assert out["ok"] is False and "reason" in out       # no crash, clear reason
+def test_train_missing_dataset_is_graceful(tmp_path):
+    # Point at a nonexistent dataset so this never loads a model / downloads weights.
+    out = train.train(dataset_path=str(tmp_path / "nope.jsonl"), out_dir=str(tmp_path / "ck"))
+    assert isinstance(out, dict) and out.get("ok") is False and "reason" in out
 
 
 # ── export.py ────────────────────────────────────────────────────────────────

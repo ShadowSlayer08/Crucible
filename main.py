@@ -49,6 +49,7 @@ from discover import run_discovery
 from extraction import run_extraction
 import local_engine
 import kb as kb_mod
+import notify
 from multiturn import run_multiturn
 from dynamic_engine import (
     AttackerLLM, DynamicRedTeamer,
@@ -504,6 +505,9 @@ def build_parser():
                    help="Print Llama Guard S1-S14 + OWASP coverage heatmap and score")
     p.add_argument("--benchmarks", action="store_true",
                    help="Compare your ASR against published research baselines")
+    p.add_argument("--recommend", action="store_true",
+                   help="After the run, print defensive 'teaching prompt' recommendations "
+                        "to harden the target against the failure classes observed")
     p.add_argument("--threat-ontology", action="store_true",
                    help="Print a Microsoft-AIRT threat block (Actor/Tactic/ATLAS/CWE/Impact/Mitigation) per FAIL")
     p.add_argument("--guardrails", action="store_true",
@@ -522,6 +526,16 @@ def build_parser():
                    help="Proceed even when the whole selected pool is D-tier (stale) payloads")
     p.add_argument("--sort-by-tier", action="store_true",
                    help="Run highest-effectiveness payloads first (Tier A→B→C→D by effectiveness_tier)")
+    p.add_argument("--load-corpus", metavar="FILE",
+                   help="Load an external prompt corpus (e.g. WildJailbreak) as tests — JSONL/CSV/TSV")
+    p.add_argument("--corpus-format", choices=["auto", "jsonl", "csv", "tsv"], default="auto",
+                   help="Format for --load-corpus (default: auto-detect by extension)")
+    p.add_argument("--corpus-prompt-col", metavar="COL",
+                   help="Column holding the prompt in --load-corpus (default: auto-detect)")
+    p.add_argument("--corpus-limit", type=int, default=None, metavar="N",
+                   help="Cap the number of corpus prompts loaded (default: all)")
+    p.add_argument("--corpus-to-kb", action="store_true",
+                   help="Also seed the knowledge base with the loaded corpus prompts")
     p.add_argument("--completion-rate", action="store_true",
                    help="After the run, judge whether each FAIL also completed the user task (CR metric)")
 
@@ -681,6 +695,9 @@ def build_parser():
                    help="In --watch, print an ALERT banner when the score exceeds N")
     p.add_argument("--watch-notify", metavar="SLACK_URL",
                    help="In --watch, POST to this Slack webhook on a score regression")
+    p.add_argument("--alert-email", metavar="ADDR",
+                   help="In --watch, email this address on a score regression "
+                        "(SMTP via CRUCIBLE_SMTP_HOST/PORT/USER/PASS/FROM)")
     p.add_argument("--watch-save",   action="store_true",
                    help="In --watch, save a JSON report each cycle")
 
@@ -2203,6 +2220,32 @@ def run(args):
             custom_tests = [enrich_nist(t) for t in custom_tests]
         print(f"  {C.GREEN('✓')} Loaded {len(custom_tests)} custom test(s) from {args.payload_file}")
 
+    # ── --load-corpus: external prompt corpus (e.g. WildJailbreak) → tests ─────
+    if getattr(args, "load_corpus", None):
+        import corpus
+        try:
+            corpus_tests = corpus.load_corpus(
+                args.load_corpus, fmt=getattr(args, "corpus_format", "auto"),
+                prompt_col=getattr(args, "corpus_prompt_col", None),
+                limit=getattr(args, "corpus_limit", None))
+            corpus_tests = [metadata_mod.enrich_metadata(
+                enrich_test(enrich_owasp(t) if use_owasp else t)) for t in corpus_tests]
+            if use_nist:
+                corpus_tests = [enrich_nist(t) for t in corpus_tests]
+            custom_tests += corpus_tests
+            print(f"  {C.GREEN('✓')} Loaded {len(corpus_tests)} corpus prompt(s) from "
+                  f"{args.load_corpus}")
+            if getattr(args, "corpus_to_kb", False) and corpus_tests:
+                _ckb = _open_kb(args, seed_if_empty=False)
+                added = _ckb.add_many("attack_patterns",
+                                      [{"text": t["payload"], "metadata": {"origin": "corpus",
+                                        "id": t["id"], "expected": t.get("expected", "")}}
+                                       for t in corpus_tests])
+                print(f"  {C.CYAN('◈ KB')}: +{len(added)} corpus prompts seeded "
+                      f"({_ckb.count('attack_patterns')} patterns)")
+        except Exception as exc:
+            print(f"  {C.RED('✗')} corpus load failed: {exc}")
+
     # ── Auto-load test plugins (modules exporting TESTS) ──────────────────────
     plugin_tests = []
     if not getattr(args, "no_plugins", False):
@@ -2621,6 +2664,11 @@ def run(args):
             print(f"\n  {C.BOLD('◈ THREAT MODEL (per FAIL)')}")
             for r in fails[:15]:
                 threat_ontology.print_threat_block(r["test"], r["result"])
+
+    # ── Defensive teaching-prompt recommendations (roadmap #28) ───────────────
+    if getattr(args, "recommend", False):
+        import remediation
+        remediation.print_recommendations(results)
 
     # ── Failure-mode distribution (roadmap #57) ───────────────────────────────
     if getattr(args, "failure_modes", False):
@@ -3047,12 +3095,22 @@ def run(args):
                     save_reports(watch_results, w_scores, config, args.output_dir, mode,
                                  pdf=False, sarif=False, anonymize=use_anonymize)
 
-                # ── Slack notify on regression (score went up) ────────────────
-                notify_url = getattr(args, "watch_notify", None)
-                if notify_url and delta is not None and delta > 0:
-                    _slack_notify(notify_url,
-                                  f"AI Red Team regression: score {prev_score} → {new_score} "
-                                  f"(+{delta}) on {config.get('model','?')} [{mode}]")
+                # ── Notify on regression (score went up): Slack + email ───────
+                if delta is not None and delta > 0:
+                    _alert_msg = (f"AI Red Team regression: score {prev_score} → {new_score} "
+                                  f"(+{delta}) on {config.get('model','?')} [{mode}]  |  "
+                                  f"FAIL:{w_scores['totals']['fail']} WARN:{w_scores['totals']['warn']}")
+                    notify_url = getattr(args, "watch_notify", None)
+                    if notify_url:
+                        notify.send_slack(notify_url, _alert_msg)
+                    alert_email = getattr(args, "alert_email", None)
+                    if alert_email:
+                        ok, why = notify.send_email(
+                            alert_email,
+                            f"[AI Red Team] Regression on {config.get('model','?')} (+{delta})",
+                            _alert_msg)
+                        print(f"  {C.DIM('email alert:')} "
+                              f"{C.GREEN('sent → ' + alert_email) if ok else C.YELLOW('not sent — ' + why)}")
                 prev_score = new_score
 
 
