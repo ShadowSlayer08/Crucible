@@ -175,6 +175,26 @@ def check_env() -> dict:
         info["note"] = "No CUDA GPU detected — LoRA fine-tuning needs a GPU."
         return info
 
+    # GPU present, but this torch build may not support its compute capability
+    # (e.g. an RTX 50-series / Blackwell sm_120 card on a torch built for <= sm_90).
+    try:
+        import torch  # noqa: WPS433
+        major, minor = torch.cuda.get_device_capability()
+        cap = f"sm_{major}{minor}"
+        archs = list(torch.cuda.get_arch_list() or [])
+        name = torch.cuda.get_device_name(0)
+        info["gpu"] = name
+        info["compute"] = cap
+        if archs and cap not in archs:
+            info["note"] = (
+                f"{name} ({cap}) is NOT supported by this PyTorch build "
+                f"(it targets {archs[0]}..{archs[-1]}). Upgrade PyTorch to a wheel with "
+                f"{cap} support (Blackwell needs cu124/cu128 or a nightly build): "
+                f"pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128")
+            return info
+    except Exception:
+        pass  # capability probe is best-effort; fall through to ready
+
     info["ok"] = True
     info["note"] = f"Ready ({info['backend']} backend)."
     return info
@@ -261,7 +281,7 @@ def _train_unsloth(cfg: dict, train_texts: list, val_texts: list) -> dict:
 def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
     """LoRA fine-tune via peft + transformers + trl. Operator-run only."""
     import torch  # noqa: WPS433
-    from transformers import (AutoModelForCausalLM, AutoTokenizer,
+    from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer,
                               BitsAndBytesConfig, TrainingArguments)
     from peft import LoraConfig, prepare_model_for_kbit_training
     from trl import SFTTrainer
@@ -277,11 +297,23 @@ def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
     tokenizer = AutoTokenizer.from_pretrained(cfg["base_model"], trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    # Normalize rope_scaling so a transformers<->model version skew doesn't raise a
+    # bare KeyError('type') (Phi-3 configs alternate between 'type' and 'rope_type').
+    conf = AutoConfig.from_pretrained(cfg["base_model"], trust_remote_code=True)
+    rs = getattr(conf, "rope_scaling", None)
+    if isinstance(rs, dict):
+        if "type" not in rs and "rope_type" in rs:
+            rs["type"] = rs["rope_type"]
+        elif "rope_type" not in rs and "type" in rs:
+            rs["rope_type"] = rs["type"]
+        conf.rope_scaling = rs
     model = AutoModelForCausalLM.from_pretrained(
         cfg["base_model"],
+        config=conf,
         quantization_config=bnb,
         device_map="auto",
         trust_remote_code=True,
+        attn_implementation="eager",   # flash-attn not required / not installed
     )
     model = prepare_model_for_kbit_training(model)
 
