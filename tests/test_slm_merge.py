@@ -58,9 +58,16 @@ def test_write_config(tmp_path):
 
 
 # ── env probe + guarded run ──────────────────────────────────────────────────
-def test_check_env_reports_missing_without_import():
+def test_check_env_wellformed(monkeypatch):
+    # Environment-agnostic: well-formed dict, never raises, ok never True w/o torch.
     env = m.check_env()
-    assert env["ok"] is False and "torch" in env["missing"]   # no torch here
+    assert isinstance(env["ok"], bool) and isinstance(env["missing"], list)
+    assert (not env["ok"]) or env.get("torch") is True
+    import importlib
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(m.shutil, "which", lambda name: None)
+    env2 = m.check_env()
+    assert env2["ok"] is False and "torch" in env2["missing"]
 
 
 def test_run_merge_dry_run_builds_command():
