@@ -37,12 +37,13 @@ redai = "main:main"
 [tool.setuptools]
 py-modules = [
     "atlas_reporter", "auto", "benchmarks", "budget", "capability_profiler",
-    "checkpoint", "classifier", "classifier_eval", "colors", "compliance",
+    "checkpoint", "classifier", "classifier_eval", "colors", "compliance", "corpus",
     "config_loader", "coverage_report", "declarative", "defence_audit", "discover",
     "dynamic_engine", "embeddings", "engine", "engine_browser", "extraction",
     "guardrails", "length_optimizer", "local_engine", "longcontext", "main",
     "metadata", "metrics", "modelscan", "multimodal",
-    "multiturn", "nist", "obfuscation_wrapper", "owasp", "owasp_agentic",
+    "multiturn", "nist", "notify", "obfuscation_wrapper", "owasp", "owasp_agentic",
+    "remediation",
     "payload_audit", "payload_loader", "plugins", "policy_gen", "profile_presets",
     "reporter", "sampling", "scope_wizard", "server", "stats", "tap",
     "threat_ontology", "transferability", "trend", "vector_poison",
