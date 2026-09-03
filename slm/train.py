@@ -296,11 +296,15 @@ def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
     conf = AutoConfig.from_pretrained(cfg["base_model"], trust_remote_code=True)
     rs = getattr(conf, "rope_scaling", None)
     if isinstance(rs, dict):
-        if "type" not in rs and "rope_type" in rs:
-            rs["type"] = rs["rope_type"]
-        elif "rope_type" not in rs and "type" in rs:
-            rs["rope_type"] = rs["type"]
-        conf.rope_scaling = rs
+        rtype = str(rs.get("rope_type") or rs.get("type") or "").lower()
+        if rtype in ("", "default"):
+            # e.g. Phi-3-mini-4k: standard RoPE, no scaling — a stray {"type":"default"}
+            # trips transformers' validator ("Unknown RoPE scaling type default").
+            conf.rope_scaling = None
+        else:
+            rs.setdefault("type", rs.get("rope_type"))
+            rs.setdefault("rope_type", rs.get("type"))
+            conf.rope_scaling = rs
 
     dtype = torch.bfloat16 if _bf16_ok() else torch.float16
     common = dict(config=conf, device_map="auto", trust_remote_code=True,
@@ -351,29 +355,53 @@ def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
     train_ds = Dataset.from_dict({"text": train_texts})
     val_ds = Dataset.from_dict({"text": val_texts}) if val_texts else None
 
-    trainer = SFTTrainer(
-        model=model,
-        tokenizer=tokenizer,
-        train_dataset=train_ds,
-        eval_dataset=val_ds,
-        peft_config=lora,
-        dataset_text_field="text",
-        max_seq_length=cfg["max_seq_length"],
-        args=TrainingArguments(
-            per_device_train_batch_size=cfg["batch_size"],
-            gradient_accumulation_steps=cfg["grad_accum"],
-            num_train_epochs=cfg["epochs"],
-            learning_rate=cfg["lr"],
-            fp16=not _bf16_ok(),
-            bf16=_bf16_ok(),
-            logging_steps=10,
-            warmup_ratio=0.03,
-            lr_scheduler_type="cosine",
-            seed=cfg["seed"],
-            output_dir=os.path.join(cfg["out_dir"], "_runs"),
-            report_to="none",
-        ),
+    # trl's SFTTrainer API shifted across versions (tokenizer -> processing_class;
+    # dataset_text_field / max_seq_length moved onto SFTConfig, later renamed
+    # max_length). Introspect the installed version and pass only what it accepts.
+    import inspect  # noqa: WPS433
+    try:
+        from trl import SFTConfig
+    except Exception:
+        SFTConfig = None
+
+    ta = dict(
+        per_device_train_batch_size=cfg["batch_size"],
+        gradient_accumulation_steps=cfg["grad_accum"],
+        num_train_epochs=cfg["epochs"],
+        learning_rate=cfg["lr"],
+        fp16=not _bf16_ok(),
+        bf16=_bf16_ok(),
+        logging_steps=5,
+        warmup_ratio=0.03,
+        lr_scheduler_type="cosine",
+        seed=cfg["seed"],
+        output_dir=os.path.join(cfg["out_dir"], "_runs"),
+        report_to="none",
     )
+    ArgsCls = SFTConfig or TrainingArguments
+    arg_fields = set(inspect.signature(ArgsCls.__init__).parameters)
+    if "dataset_text_field" in arg_fields:
+        ta["dataset_text_field"] = "text"
+    for _mk in ("max_seq_length", "max_length"):
+        if _mk in arg_fields:
+            ta[_mk] = cfg["max_seq_length"]
+            break
+    args_obj = ArgsCls(**{k: v for k, v in ta.items() if k in arg_fields})
+
+    sft_params = set(inspect.signature(SFTTrainer.__init__).parameters)
+    kw = {}
+    if "processing_class" in sft_params:
+        kw["processing_class"] = tokenizer
+    elif "tokenizer" in sft_params:
+        kw["tokenizer"] = tokenizer
+    if SFTConfig is None:  # old API kept these on the trainer, not the config
+        if "dataset_text_field" in sft_params:
+            kw["dataset_text_field"] = "text"
+        if "max_seq_length" in sft_params:
+            kw["max_seq_length"] = cfg["max_seq_length"]
+
+    trainer = SFTTrainer(model=model, args=args_obj, train_dataset=train_ds,
+                         eval_dataset=val_ds, peft_config=lora, **kw)
     trainer.train()
     trainer.save_model(cfg["out_dir"])
     tokenizer.save_pretrained(cfg["out_dir"])
