@@ -83,7 +83,7 @@ def merge_adapter(checkpoint: str, base_model: str, out_dir: str) -> dict:
     try:
         import torch  # noqa: F401
         from peft import PeftModel
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
     except Exception as e:  # heavy stack absent in authoring env
         return _fail(
             "merge needs the training stack — install with "
@@ -93,11 +93,31 @@ def merge_adapter(checkpoint: str, base_model: str, out_dir: str) -> dict:
     try:
         os.makedirs(out_dir, exist_ok=True)
         print(C.DIM(f"  loading base model {base_model} …"))
+        # Same rope_scaling normalization as slm/train.py so a transformers<->Phi-3
+        # version skew doesn't raise KeyError('type') / "Unknown RoPE scaling type default".
+        conf = AutoConfig.from_pretrained(base_model, trust_remote_code=True)
+        rs = getattr(conf, "rope_scaling", None)
+        if isinstance(rs, dict):
+            rtype = str(rs.get("rope_type") or rs.get("type") or "").lower()
+            if rtype in ("", "default"):
+                conf.rope_scaling = None
+            else:
+                rs.setdefault("type", rs.get("rope_type"))
+                rs.setdefault("rope_type", rs.get("type"))
+                conf.rope_scaling = rs
         base = AutoModelForCausalLM.from_pretrained(
-            base_model, torch_dtype="auto", device_map="auto")
+            base_model, config=conf, torch_dtype="auto", device_map="auto",
+            trust_remote_code=True, attn_implementation="eager")
         print(C.DIM(f"  applying adapter {checkpoint} …"))
         model = PeftModel.from_pretrained(base, checkpoint)
         merged = model.merge_and_unload()
+        # transformers-nightly save regression: _get_tied_weight_keys() calls
+        # .keys() assuming a dict, but some models (Phi-3) declare
+        # _tied_weights_keys as a list -> AttributeError. Coerce list -> dict.
+        for _mod in merged.modules():
+            _twk = getattr(_mod, "_tied_weights_keys", None)
+            if isinstance(_twk, list):
+                _mod._tied_weights_keys = {k: k for k in _twk}
         merged.save_pretrained(out_dir, safe_serialization=True)
         # keep the tokenizer alongside the weights so GGUF conversion has it
         try:
