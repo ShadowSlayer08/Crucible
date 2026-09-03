@@ -288,12 +288,6 @@ def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
     from datasets import Dataset
 
     print(C.DIM(f"  loading base model via transformers: {cfg['base_model']}"))
-    bnb = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.bfloat16 if _bf16_ok() else torch.float16,
-        bnb_4bit_use_double_quant=True,
-    )
     tokenizer = AutoTokenizer.from_pretrained(cfg["base_model"], trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -307,15 +301,43 @@ def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
         elif "rope_type" not in rs and "type" in rs:
             rs["rope_type"] = rs["type"]
         conf.rope_scaling = rs
-    model = AutoModelForCausalLM.from_pretrained(
-        cfg["base_model"],
-        config=conf,
-        quantization_config=bnb,
-        device_map="auto",
-        trust_remote_code=True,
-        attn_implementation="eager",   # flash-attn not required / not installed
-    )
-    model = prepare_model_for_kbit_training(model)
+
+    dtype = torch.bfloat16 if _bf16_ok() else torch.float16
+    common = dict(config=conf, device_map="auto", trust_remote_code=True,
+                  attn_implementation="eager")   # flash-attn not required / not installed
+
+    def _load(four_bit: bool):
+        if four_bit:
+            bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                                     bnb_4bit_compute_dtype=dtype,
+                                     bnb_4bit_use_double_quant=True)
+            return AutoModelForCausalLM.from_pretrained(
+                cfg["base_model"], quantization_config=bnb, **common)
+        return AutoModelForCausalLM.from_pretrained(
+            cfg["base_model"], torch_dtype=dtype, **common)
+
+    # 4-bit QLoRA is lowest-VRAM but needs bitsandbytes kernels for the GPU; on new
+    # cards where bnb lags (e.g. Blackwell) fall back to a bf16 LoRA (Phi-3-mini fits ~12GB).
+    want_4bit = cfg.get("four_bit", True) and _has("bitsandbytes")
+    try:
+        model = _load(want_4bit)
+        used_4bit = want_4bit
+    except Exception as exc:
+        if not want_4bit:
+            raise
+        print(C.YELLOW(f"  4-bit load failed ({str(exc)[:120]}); "
+                       "falling back to bf16 LoRA (no bitsandbytes)"))
+        model = _load(False)
+        used_4bit = False
+    if used_4bit:
+        model = prepare_model_for_kbit_training(model)
+    else:
+        try:
+            model.gradient_checkpointing_enable()
+            model.enable_input_require_grads()
+        except Exception:
+            pass
+    print(C.DIM(f"  load mode: {'4-bit QLoRA' if used_4bit else 'bf16 LoRA'}"))
 
     lora = LoraConfig(
         r=cfg["lora_r"],
@@ -355,7 +377,8 @@ def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
     trainer.train()
     trainer.save_model(cfg["out_dir"])
     tokenizer.save_pretrained(cfg["out_dir"])
-    return {"ok": True, "backend": "peft", "out_dir": cfg["out_dir"]}
+    return {"ok": True, "backend": "peft", "out_dir": cfg["out_dir"],
+            "quantized": used_4bit}
 
 
 def _bf16_ok() -> bool:
@@ -383,7 +406,8 @@ def train(dataset_path: str = DEFAULT_DATASET,
           lr: float = 2e-4,
           max_seq_length: int = 2048,
           val_frac: float = 0.1,
-          seed: int = 1234) -> dict:
+          seed: int = 1234,
+          four_bit: bool = True) -> dict:
     """LoRA fine-tune `base_model` on the collector's JSONL and save the adapter.
 
     Returns a result dict. On a machine without a GPU / training backend this
@@ -432,7 +456,7 @@ def train(dataset_path: str = DEFAULT_DATASET,
         "base_model": base_model, "out_dir": out_dir, "epochs": epochs,
         "lora_r": lora_r, "lora_alpha": lora_alpha, "lora_dropout": lora_dropout,
         "batch_size": batch_size, "grad_accum": grad_accum, "lr": lr,
-        "max_seq_length": max_seq_length, "seed": seed,
+        "max_seq_length": max_seq_length, "seed": seed, "four_bit": four_bit,
     }
     os.makedirs(out_dir, exist_ok=True)
     print(C.DIM(f"  backend={env['backend']}  base={base_model}  "
@@ -481,6 +505,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=1234)
     p.add_argument("--check-env", action="store_true",
                    help="probe torch/CUDA/backend and exit (no training)")
+    p.add_argument("--no-4bit", action="store_true",
+                   help="skip 4-bit QLoRA (bitsandbytes) and use a bf16 LoRA instead "
+                        "— use when bitsandbytes lacks kernels for your GPU (e.g. Blackwell)")
     return p
 
 
@@ -505,7 +532,7 @@ def main(argv=None) -> int:
         epochs=args.epochs, lora_r=args.lora_r, lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout, batch_size=args.batch_size,
         grad_accum=args.grad_accum, lr=args.lr, max_seq_length=args.max_seq_length,
-        val_frac=args.val_frac, seed=args.seed)
+        val_frac=args.val_frac, seed=args.seed, four_bit=not args.no_4bit)
     return 0 if result.get("ok") else 1
 
 
