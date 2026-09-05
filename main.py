@@ -818,6 +818,33 @@ def build_parser():
                         "discovery_<timestamp>.json in --output-dir. "
                         "Requires --endpoint (and --api-key unless ollama).")
 
+    # ── NEW: infra recon (AgentHound bridge) + full-stack orchestration ────────
+    p.add_argument("--recon", action="store_true",
+                   help="INFRA-layer recon via AgentHound (github.com/adithyan-ak/"
+                        "AgentHound). Discovers exposed MCP/LiteLLM/Ollama/vLLM/Qdrant/"
+                        "MLflow/Jupyter/Open-WebUI services + credential chains + "
+                        "attack paths across --recon-scope, folds them into REDai's "
+                        "frameworks, and lists the model/agent endpoints found. "
+                        "Requires the 'agenthound' binary (or use --recon-input). "
+                        "Offensive / authorized-use only.")
+    p.add_argument("--recon-input", metavar="FILE",
+                   help="Ingest an AgentHound JSON scan produced out-of-band instead of "
+                        "running the binary. Works fully offline.")
+    p.add_argument("--recon-scope", metavar="SCOPE",
+                   help="Scope passed to 'agenthound scan' (CIDR/host/URL). Authorized "
+                        "infrastructure only.")
+    p.add_argument("--recon-mode", choices=["stealth", "active"], default="stealth",
+                   help="AgentHound scan mode: stealth = read-only (default), "
+                        "active = probes services.")
+    p.add_argument("--recon-to-targets", action="store_true",
+                   help="Save every discovered model/agent endpoint to the REDai target "
+                        "book (redai-targets.yaml) so you can sweep them by name.")
+    p.add_argument("--full-stack", action="store_true",
+                   help="ONE tool, full stack: run infra recon (AgentHound), auto-save "
+                        "the discovered model/agent endpoints as targets, then print the "
+                        "behavioural red-team sweep plan (the exact per-endpoint REDai "
+                        "commands) — the infra + behavioural layers unified.")
+
     # ── NEW: active model-stealing engine ─────────────────────────────────────
     p.add_argument("--extract", action="store_true",
                    help="Run the active model-stealing engine: decoding-determinism "
@@ -2013,6 +2040,85 @@ def run(args):
             output_dir=getattr(args, "output_dir", "./reports"),
             skip_connection_test=getattr(args, "skip_connection_test", False),
         )
+        sys.exit(0)
+
+    # ── --recon / --full-stack: infra recon (AgentHound), then exit ───────────
+    if getattr(args, "recon", False) or getattr(args, "recon_input", None) \
+            or getattr(args, "full_stack", False):
+        import agenthound
+        full_stack = getattr(args, "full_stack", False)
+
+        recon_input = getattr(args, "recon_input", None)
+        if recon_input:
+            if not os.path.exists(recon_input):
+                print(f"  {C.RED('✗')} --recon-input file not found: {recon_input}")
+                sys.exit(2)
+            try:
+                parsed = agenthound.parse(recon_input)
+            except Exception as exc:
+                print(f"  {C.RED('✗')} Could not parse AgentHound JSON: {exc}")
+                sys.exit(2)
+            raw = None
+        else:
+            scope = getattr(args, "recon_scope", None) or args.endpoint \
+                or os.environ.get("AI_RT_ENDPOINT", "")
+            if not scope:
+                print(f"  {C.RED('✗')} --recon needs --recon-scope (authorized infra "
+                      f"CIDR/host/URL), or use --recon-input with an existing scan.")
+                sys.exit(2)
+            print(f"  {C.DIM('Running AgentHound recon over')} {C.CYAN(scope)} "
+                  f"{C.DIM('(' + getattr(args, 'recon_mode', 'stealth') + ')…')}")
+            res = agenthound.run_scan(scope, mode=getattr(args, "recon_mode", "stealth"))
+            if not res.get("ok"):
+                print(f"  {C.YELLOW('!')} {res.get('reason')}")
+                sys.exit(3)
+            parsed = agenthound.parse(res["data"])
+            raw = res.get("data")
+
+        agenthound.print_recon_report(parsed)
+
+        # Persist the normalized recon alongside other reports.
+        if not getattr(args, "no_save", False):
+            out_dir = getattr(args, "output_dir", "./reports") or "./reports"
+            os.makedirs(out_dir, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            recon_path = os.path.join(out_dir, f"recon_{stamp}.json")
+            with open(recon_path, "w", encoding="utf-8") as f:
+                json.dump({"stats": parsed["stats"], "findings": parsed["findings"],
+                           "endpoints": [{k: v for k, v in e.items() if k != "raw"}
+                                         for e in parsed["endpoints"]],
+                           "attack_paths": parsed["paths"],
+                           "targets": agenthound.to_targets(parsed),
+                           "raw": raw}, f, indent=2)
+            print(f"  {C.GREEN('✓')} Recon saved → {C.CYAN(recon_path)}\n")
+
+        discovered = agenthound.to_targets(parsed)
+
+        # Fold the discovered endpoints into the target book.
+        if discovered and (getattr(args, "recon_to_targets", False) or full_stack):
+            for t in discovered:
+                targets_mod.save_target(t["name"], t["endpoint"], t["model"], t["schema"])
+            print(f"  {C.GREEN('✓')} Saved {C.BOLD(str(len(discovered)))} discovered "
+                  f"endpoint(s) to the target book (redai-targets.yaml)\n")
+
+        # Full-stack: hand the behavioural sweep plan to the operator.
+        if full_stack:
+            if not discovered:
+                print(f"  {C.YELLOW('!')} Recon found no model/agent endpoints to "
+                      f"behaviourally test — infra findings above stand alone.\n")
+            else:
+                print(f"{'═' * 78}")
+                print(C.BOLD("  BEHAVIOURAL SWEEP PLAN  —  red-team each discovered endpoint"))
+                print(f"{'═' * 78}")
+                for t in discovered:
+                    key = "" if t["schema"] == "ollama" else " --api-key $KEY"
+                    print(f"    {C.CYAN('redai')} --target {t['name']} --mode "
+                          f"{t['suggested_mode']}{key}")
+                print("\n  " + C.DIM("Endpoints are saved as targets above; run the "
+                                     "lines above (or loop them) to"))
+                print("  " + C.DIM("execute the behavioural layer. Infra + behavioural "
+                                   "findings share REDai frameworks.") + "\n")
+
         sys.exit(0)
 
     # ── --extract: active model-stealing engine, then exit ────────────────────

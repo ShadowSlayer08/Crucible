@@ -36,6 +36,7 @@ redai = "main:main"
 
 [tool.setuptools]
 py-modules = [
+    "agenthound",
     "atlas_reporter", "auto", "benchmarks", "budget", "capability_profiler",
     "checkpoint", "classifier", "classifier_eval", "colors", "compliance", "corpus",
     "config_loader", "coverage_report", "declarative", "defence_audit", "discover",
