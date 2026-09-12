@@ -24,9 +24,9 @@ def test_rot13_mutation_roundtrips():
     assert codecs.decode("nggnpx", "rot13") == "attack"
 
 
-def test_all_mutations_returns_twelve():
+def test_all_mutations_returns_sixteen():
     muts = PayloadMutator().all_mutations("do the thing")
-    assert len(muts) == 12
+    assert len(muts) == 16
     names = {mm.method_name for mm in muts}
     assert "base64_encode" in names and "rot13_encode" in names
     # DeepTeam-parity framings + Bad-Likert-Judge
