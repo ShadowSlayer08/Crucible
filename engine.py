@@ -18,6 +18,9 @@ Built-in presets:
 import time
 import json
 import copy
+import ipaddress
+import threading
+from urllib.parse import urlparse
 import requests
 
 
@@ -276,10 +279,66 @@ def set_offline(flag: bool = True) -> None:
     _OFFLINE = bool(flag)
 
 
+# ── Client-side rate limiting ────────────────────────────────────────────────
+# So a sweep (esp. the up-to-10-way concurrent path, plus extraction which calls
+# run_test directly) can't exhaust or knock over a smaller self-hosted target.
+_RATE_LOCK = threading.Lock()
+_MIN_INTERVAL = 0.0        # seconds between request STARTS; 0 = unlimited (default)
+_LAST_CALL = [0.0]         # last request start (time.monotonic), mutable holder
+
+
+def set_rate(rps: float = 0.0, delay: float = 0.0) -> None:
+    """Configure client-side pacing shared across all threads. rps>0 caps requests
+    per second; delay>0 forces a fixed minimum gap (seconds). The larger implied
+    interval wins. 0/0 restores unlimited. Applies to every run_test caller."""
+    global _MIN_INTERVAL
+    interval = 0.0
+    if rps and rps > 0:
+        interval = max(interval, 1.0 / float(rps))
+    if delay and delay > 0:
+        interval = max(interval, float(delay))
+    _MIN_INTERVAL = interval
+    _LAST_CALL[0] = 0.0
+
+
+def _throttle() -> None:
+    """Block until at least _MIN_INTERVAL has elapsed since the previous request
+    start. Thread-safe: serializes the spacing decision so concurrent workers still
+    leave at a steady global rate."""
+    if _MIN_INTERVAL <= 0:
+        return
+    with _RATE_LOCK:
+        wait = _MIN_INTERVAL - (time.monotonic() - _LAST_CALL[0])
+        if wait > 0:
+            time.sleep(wait)
+        _LAST_CALL[0] = time.monotonic()
+
+
+_LOCAL_HOSTNAMES = {"localhost", "ip6-localhost", "ip6-loopback", "host.docker.internal"}
+
+
 def _is_local_url(url: str) -> bool:
-    u = (url or "").lower()
-    return any(h in u for h in
-               ("localhost", "127.0.0.1", "0.0.0.0", "[::1]", "host.docker.internal"))
+    """True only if the URL's HOST is a loopback/link-local/unspecified address or a
+    known local hostname. Parses the host rather than substring-scanning the whole
+    URL, so 'http://localhost.evil.com/', 'http://127.0.0.1.evil.com/' and
+    'https://api.openai.com/?x=127.0.0.1' are correctly treated as NON-local."""
+    raw = url or ""
+    try:
+        host = urlparse(raw if "://" in raw else "http://" + raw).hostname
+    except Exception:
+        return False
+    if not host:
+        return False
+    host = host.lower().strip("[]")
+    if host in _LOCAL_HOSTNAMES:
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+        # Loopback / unspecified only — NOT link-local (169.254.x = cloud metadata),
+        # which must not count as "local" for an air-gap guard.
+        return ip.is_loopback or ip.is_unspecified
+    except ValueError:
+        return False
 
 
 def run_test(config: dict, test: dict, max_retries: int = 3,
@@ -326,6 +385,7 @@ def run_test(config: dict, test: dict, max_retries: int = 3,
     attempt = 0
     while attempt < max_retries:
         try:
+            _throttle()   # client-side pacing (no-op unless set_rate() enabled it)
             resp = requests.post(url, headers=headers, json=body, timeout=30)
 
             if resp.status_code == 429:
