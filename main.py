@@ -250,6 +250,16 @@ MODE_DESCRIPTIONS = {
         "desc":  "Query-based model stealing — see --extract for the active multi-query engine.",
         "tests": EXPANDED_MODE_TESTS["model-theft"],
     },
+    "modern-jailbreak": {
+        "label": "Modern Jailbreak Mode  (2024–2025 universal bypasses)",
+        "desc":  "Policy Puppetry, Skeleton Key and Deceptive Delight — current-meta cross-model bypasses.",
+        "tests": EXPANDED_MODE_TESTS["modern-jailbreak"],
+    },
+    "many-shot": {
+        "label": "Many-Shot Mode  (long-context in-context-learning bypass)",
+        "desc":  "Fabricated compliant dialogue at escalating shot counts (4/8/16/32) — the shot-count→ASR curve.",
+        "tests": EXPANDED_MODE_TESTS["many-shot"],
+    },
 }
 
 
@@ -471,7 +481,7 @@ def build_parser():
         "mcp", "agentic", "rag", "swarm", "policy", "benign", "obfuscation",
         "multilingual", "multimodal", "memory-poison", "pismith",
         "rag-long", "defence-audit", "authz", "audio", "video", "harm",
-        "model-theft",
+        "model-theft", "modern-jailbreak", "many-shot",
     ])
     # ── Declarative Vuln × Attack composition (roadmap G6) ────────────────────
     p.add_argument("--vuln", metavar="A,B",
@@ -904,6 +914,21 @@ def build_parser():
     p.add_argument("--dynamic-judge", action="store_true",
                    help="Use the attacker LLM as the response judge in dynamic mode "
                         "instead of the built-in rule-based classifier")
+
+    # ── Crescendo adaptive multi-turn (improvement-audit Slice C) ─────────────
+    p.add_argument("--crescendo", action="store_true",
+                   help="Adaptive multi-turn (Crescendo) attack: an attacker LLM grows a "
+                        "conversation, derives each next turn from the target's own prior "
+                        "replies, escalates gradually toward --crescendo-goal, and "
+                        "backtracks on refusal. Uses --attacker-endpoint/--attacker-model. "
+                        "Saves crescendo_<ts>.json. Authorized-use only.")
+    p.add_argument("--crescendo-goal", metavar="GOAL",
+                   help="The objective the crescendo escalates toward (what the target "
+                        "should ultimately do/reveal).")
+    p.add_argument("--crescendo-turns", type=int, default=6, metavar="N",
+                   help="Maximum conversation turns before giving up (default: 6)")
+    p.add_argument("--crescendo-category", metavar="CAT", default="Jailbreak",
+                   help="Attack category for the crescendo (default: Jailbreak)")
 
     # ── Policy attack generation (roadmap F1) ─────────────────────────────────
     p.add_argument("--generate-policy", action="store_true",
@@ -2242,6 +2267,57 @@ def run(args):
             skip_connection_test=getattr(args, "skip_connection_test", False),
         )
         sys.exit(0)
+
+    # ── --crescendo: adaptive multi-turn attack, then exit ────────────────────
+    if getattr(args, "crescendo", False):
+        import crescendo as crescendo_mod
+        from dynamic_engine import AttackerLLM
+        if not require_authorization(args, "the Crescendo adaptive multi-turn attack"):
+            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); sys.exit(0)
+
+        goal = getattr(args, "crescendo_goal", None)
+        if not goal:
+            goal = _read_line("  Enter the crescendo goal (what the target should reveal/do): ")
+        if not goal:
+            print(f"  {C.RED('✗')} --crescendo needs --crescendo-goal.")
+            sys.exit(2)
+
+        api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
+        endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
+        schema   = args.schema or "openai"
+        if not endpoint:
+            hint     = "http://localhost:11434" if schema == "ollama" else "https://api.openai.com"
+            endpoint = _read_line(f"  Enter endpoint [{hint}]: ", default=hint)
+        if not api_key and schema not in ("ollama", "browser"):
+            api_key = _read_line("  Enter API key: ", secret=True)
+
+        config = {"api_key": api_key or "", "endpoint": endpoint.rstrip("/"),
+                  "model": args.model, "schema": schema, "extra_headers": {}}
+        if args.extra_headers:
+            for hdr in args.extra_headers:
+                if ":" in hdr:
+                    k, _, v = hdr.partition(":")
+                    config["extra_headers"][k.strip()] = v.strip()
+
+        attacker = AttackerLLM(model=getattr(args, "attacker_model", "kimi-k2"),
+                               endpoint=getattr(args, "attacker_endpoint", "http://localhost:11434"))
+        result = crescendo_mod.run_crescendo_live(
+            goal, config, attacker,
+            category=getattr(args, "crescendo_category", "Jailbreak"),
+            max_turns=getattr(args, "crescendo_turns", 6),
+        )
+        crescendo_mod.print_crescendo_report(result, colors=C)
+
+        if not getattr(args, "no_save", False):
+            out_dir = getattr(args, "output_dir", "./reports") or "./reports"
+            os.makedirs(out_dir, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = os.path.join(out_dir, f"crescendo_{stamp}.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(result, f, indent=2, ensure_ascii=False)
+            print(f"  {C.GREEN('✓')} Saved → {C.CYAN(path)}\n")
+
+        sys.exit(1 if result.get("success") else 0)
 
     if not args.mode and not args.resume \
             and not getattr(args, "compare", False) \
