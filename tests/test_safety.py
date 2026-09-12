@@ -174,14 +174,14 @@ def test_is_local_false(url):
 
 # ── A4: client-side rate limiting ────────────────────────────────────────────
 def test_throttle_spaces_requests():
-    engine.set_rate(rps=100)          # 0.01s min interval
+    engine.set_rate(delay=0.05)       # 0.05s min interval (robust vs OS sleep jitter)
     try:
         t0 = time.monotonic()
         engine._throttle()            # first is immediate
-        engine._throttle()
-        engine._throttle()
+        engine._throttle()            # ~0.05s
+        engine._throttle()            # ~0.05s
         elapsed = time.monotonic() - t0
-        assert elapsed >= 0.015       # ~2 intervals of enforced spacing
+        assert elapsed >= 0.07        # ~2 intervals of enforced spacing
     finally:
         engine.set_rate(0)
 
