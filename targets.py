@@ -38,12 +38,21 @@ def get_target(name: str, path: str = None) -> dict | None:
 
 
 def save_target(name: str, endpoint: str, model: str, schema: str,
-                path: str = None) -> str:
-    """Save a named target (never the api_key). Returns the file path."""
+                path: str = None, extra: dict = None) -> str:
+    """Save a named target (never the api_key). Returns the file path.
+
+    `extra` persists recon-derived context (service type, suggested_mode, auth state,
+    source finding id) alongside the target so full-stack findings can attribute back
+    to the infra that discovered them. apply_target/print_targets read only the core
+    endpoint/model/schema fields, so extra keys are inert for normal runs."""
     import yaml
     path = path or TARGETS_FILE
     data = load_targets(path)
-    data[name] = {"endpoint": endpoint, "model": model, "schema": schema}
+    record = {"endpoint": endpoint, "model": model, "schema": schema}
+    if extra:
+        record.update({k: v for k, v in extra.items()
+                       if k not in ("endpoint", "model", "schema") and v not in (None, "")})
+    data[name] = record
     with open(path, "w", encoding="utf-8") as f:
         f.write("# REDai saved targets — DO NOT store API keys here (git-ignored).\n")
         yaml.safe_dump(data, f, sort_keys=True, allow_unicode=True)

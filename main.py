@@ -867,9 +867,14 @@ def build_parser():
                         "AI_RT_AUTHORIZED=1). --ci does NOT bypass these gates.")
     p.add_argument("--full-stack", action="store_true",
                    help="ONE tool, full stack: run infra recon (AgentHound), auto-save "
-                        "the discovered model/agent endpoints as targets, then print the "
-                        "behavioural red-team sweep plan (the exact per-endpoint REDai "
-                        "commands) — the infra + behavioural layers unified.")
+                        "the discovered model/agent endpoints as targets, RUN REDai's "
+                        "behavioural red-team against each, and emit ONE unified report "
+                        "(infra + behaviour under shared ATLAS/OWASP/NIST, with chained "
+                        "findings + attack-path graph). Add --no-sweep to only print the "
+                        "plan without firing.")
+    p.add_argument("--no-sweep", action="store_true",
+                   help="With --full-stack: save discovered endpoints + print the "
+                        "behavioural sweep plan, but do NOT fire the behavioural runs.")
 
     # ── NEW: active model-stealing engine ─────────────────────────────────────
     p.add_argument("--extract", action="store_true",
@@ -2169,19 +2174,24 @@ def run(args):
 
         discovered = agenthound.to_targets(parsed)
 
-        # Fold the discovered endpoints into the target book.
+        # Fold the discovered endpoints into the target book, carrying the recon
+        # context (service / suggested_mode / auth) so findings attribute back.
         if discovered and (getattr(args, "recon_to_targets", False) or full_stack):
             for t in discovered:
-                targets_mod.save_target(t["name"], t["endpoint"], t["model"], t["schema"])
+                targets_mod.save_target(
+                    t["name"], t["endpoint"], t["model"], t["schema"],
+                    extra={"service": t.get("service"), "suggested_mode": t.get("suggested_mode"),
+                           "auth": t.get("auth"), "source": "agenthound-recon"})
             print(f"  {C.GREEN('✓')} Saved {C.BOLD(str(len(discovered)))} discovered "
                   f"endpoint(s) to the target book (redai-targets.yaml)\n")
 
-        # Full-stack: hand the behavioural sweep plan to the operator.
         if full_stack:
+            import fullstack
             if not discovered:
                 print(f"  {C.YELLOW('!')} Recon found no model/agent endpoints to "
                       f"behaviourally test — infra findings above stand alone.\n")
-            else:
+            elif getattr(args, "no_sweep", False):
+                # Plan-only: print the per-endpoint commands without firing.
                 print(f"{'═' * 78}")
                 print(C.BOLD("  BEHAVIOURAL SWEEP PLAN  —  red-team each discovered endpoint"))
                 print(f"{'═' * 78}")
@@ -2189,10 +2199,30 @@ def run(args):
                     key = "" if t["schema"] == "ollama" else " --api-key $KEY"
                     print(f"    {C.CYAN('redai')} --target {t['name']} --mode "
                           f"{t['suggested_mode']}{key}")
-                print("\n  " + C.DIM("Endpoints are saved as targets above; run the "
-                                     "lines above (or loop them) to"))
-                print("  " + C.DIM("execute the behavioural layer. Infra + behavioural "
-                                   "findings share REDai frameworks.") + "\n")
+                print("\n  " + C.DIM("(--no-sweep) run the lines above to execute the "
+                                     "behavioural layer.") + "\n")
+            else:
+                # Actually run the behavioural sweep, then emit ONE unified report.
+                out_dir = getattr(args, "output_dir", "./reports") or "./reports"
+                sweep_dir = os.path.join(out_dir, "fullstack")
+                print(f"  {C.DIM('Running behavioural sweep over')} "
+                      f"{C.BOLD(str(len(discovered)))} {C.DIM('discovered endpoint(s)…')}")
+                sweep_rows = fullstack.sweep_targets(discovered, report_dir=sweep_dir)
+                unified = fullstack.build_unified_report(
+                    parsed, sweep_rows,
+                    meta={"scope": getattr(args, "recon_scope", None) or args.endpoint})
+                fullstack.print_unified_report(unified, colors=C)
+
+                if not getattr(args, "no_save", False):
+                    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    fs_path = os.path.join(out_dir, f"fullstack_{stamp}.json")
+                    with open(fs_path, "w", encoding="utf-8") as f:
+                        json.dump(unified, f, indent=2, ensure_ascii=False)
+                    sarif_path = os.path.join(out_dir, f"fullstack_{stamp}.sarif")
+                    import reporter
+                    reporter.save_sarif([], {"endpoint": unified["meta"].get("scope", "")},
+                                        sarif_path, infra_findings=parsed.get("findings", []))
+                    print(f"  {C.GREEN('✓')} Full-stack report → {C.CYAN(fs_path)}\n")
 
         sys.exit(0)
 

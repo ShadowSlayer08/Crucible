@@ -504,8 +504,52 @@ def save_reports(results: list, scores: dict, config: dict, output_dir: str, mod
 
 
 # ── SARIF 2.1.0 export ────────────────────────────────────────────────────────
+_INFRA_LEVEL = {"CRITICAL": "error", "HIGH": "error", "MEDIUM": "warning",
+                "LOW": "note", "INFO": "note"}
+
+
+def _infra_sarif(infra_findings: list):
+    """Convert AgentHound-normalized infra findings into SARIF (rules, results).
+    Each finding carries id/title/severity/service/url/detail/atlas_id/owasp_id."""
+    rules, results = {}, []
+    for i, f in enumerate(infra_findings or [], 1):
+        rid = f.get("id") or f"AH-INFRA-{i:03d}"
+        rules[rid] = {
+            "id": rid,
+            "name": ("infra-" + str(f.get("service", "") or "finding")).replace(" ", ""),
+            "shortDescription": {"text": f.get("title", "infra finding")},
+            "fullDescription": {"text": (f.get("detail", "") or "")[:300]},
+            "properties": {
+                "category": "infrastructure",
+                "severity": f.get("severity", "MEDIUM").title(),
+                "atlas_id": f.get("atlas_id", "N/A"),
+                "owasp_id": f.get("owasp_id", "N/A"),
+                "service": f.get("service", ""),
+            },
+        }
+        url = f.get("url") or f"infra://{f.get('service', 'unknown')}"
+        results.append({
+            "ruleId": rid,
+            "level": _INFRA_LEVEL.get(str(f.get("severity", "")).upper(), "warning"),
+            "message": {"text": f.get("title", "") + (
+                f" — {f['detail']}" if f.get("detail") else "")},
+            "locations": [{"physicalLocation": {
+                "artifactLocation": {"uri": url if str(url).startswith(("http", "infra")) else f"infra://{url}"},
+                "region": {"startLine": 1}}}],
+            "properties": {
+                "category": "infrastructure",
+                "layer": "infra",
+                "service": f.get("service", ""),
+                "severity": f.get("severity", ""),
+                "atlas_id": f.get("atlas_id", "N/A"),
+                "owasp_id": f.get("owasp_id", "N/A"),
+            },
+        })
+    return rules, results
+
+
 def save_sarif(results: list, config: dict, output_path: str,
-               anonymize: bool = False) -> None:
+               anonymize: bool = False, infra_findings: list = None) -> None:
     cfg = anonymize_config(config) if anonymize else config
     seen_rules: dict = {}
     for r in results:
@@ -558,6 +602,13 @@ def save_sarif(results: list, config: dict, output_path: str,
                 "flagged_excerpt": (res.get("flagged_excerpt", "") or "")[:300],
             },
         })
+
+    # Fold in AgentHound infra findings (full-stack merge): infra + behaviour in
+    # one SARIF run, so CI code-scanning surfaces both layers together.
+    if infra_findings:
+        infra_rules, infra_results = _infra_sarif(infra_findings)
+        seen_rules.update(infra_rules)
+        sarif_results.extend(infra_results)
 
     sarif_doc = {
         "$schema": (
