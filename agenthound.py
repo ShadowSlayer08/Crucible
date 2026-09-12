@@ -24,10 +24,41 @@ Public API:
 
 import json
 import os
+import re
 import shutil
 import subprocess
 
 import colors as C
+
+# Field names whose values are credentials/secrets and must be masked before an
+# AgentHound blob is persisted. Deliberately does NOT match the bare "auth" status
+# field (endpoints carry auth="none"/"key"/"unauthenticated" — useful, not secret).
+_SECRET_KEY_RE = re.compile(
+    r"pass(word|wd)?|secret|token|api[-_ ]?key|credential|bearer|"
+    r"private[-_ ]?key|access[-_ ]?key|cookie|authoriz|"
+    r"auth[-_ ](token|header|key)|session[-_ ]?id",
+    re.I,
+)
+_REDACTED = "«redacted»"
+
+
+def redact_secrets(obj, mask: str = _REDACTED):
+    """Recursively mask credential-like values in an AgentHound blob before it is
+    written to disk (recon reports can otherwise become a cleartext loot cache).
+    A dict key matching _SECRET_KEY_RE has its scalar value masked; lists and
+    nested dicts are walked. Returns a NEW structure — never mutates the input,
+    never raises."""
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if isinstance(k, str) and _SECRET_KEY_RE.search(k) and isinstance(v, (str, int, float, bool)):
+                out[k] = mask
+            else:
+                out[k] = redact_secrets(v, mask)
+        return out
+    if isinstance(obj, list):
+        return [redact_secrets(x, mask) for x in obj]
+    return obj
 
 # Service type -> (CRUCIBLE schema, suggested --mode). Types that expose an LLM/agent
 # chat surface become behavioural targets; pure-infra stores (qdrant/mlflow/…) do not.

@@ -607,6 +607,13 @@ def build_parser():
                    help="Halt the run once estimated API spend reaches this many dollars")
     p.add_argument("--max-calls", type=int, default=None, metavar="N",
                    help="Halt the run after N API calls to the target")
+    p.add_argument("--rps", type=float, default=None, metavar="R",
+                   help="Client-side rate limit: at most R requests/sec to the target "
+                        "(across all concurrent workers). Prevents a sweep from "
+                        "overwhelming a small self-hosted target. Default: unlimited.")
+    p.add_argument("--delay", type=float, default=None, metavar="SEC",
+                   help="Minimum delay (seconds) between requests to the target "
+                        "(the larger of --delay / implied --rps interval wins).")
     p.add_argument("--seed", type=int, default=None, metavar="N",
                    help="Seed all randomness (bandit / TAP / sampling) for reproducible runs")
     p.add_argument("--cache", action="store_true",
@@ -839,6 +846,15 @@ def build_parser():
     p.add_argument("--recon-to-targets", action="store_true",
                    help="Save every discovered model/agent endpoint to the CRUCIBLE target "
                         "book (crucible-targets.yaml) so you can sweep them by name.")
+    p.add_argument("--recon-save-raw", action="store_true",
+                   help="Also persist AgentHound's raw scan blob in the recon report "
+                        "(redacted). OFF by default — the raw blob can contain looted "
+                        "credentials; only the normalized findings/endpoints are saved.")
+    p.add_argument("--i-am-authorized", action="store_true",
+                   help="Non-interactive authorization opt-in for the offensive paths "
+                        "(--recon/--full-stack/--extract/--discover). Equivalent to "
+                        "answering 'yes' at the authorization prompt (or set "
+                        "CRUCIBLE_AUTHORIZED=1). --ci does NOT bypass these gates.")
     p.add_argument("--full-stack", action="store_true",
                    help="ONE tool, full stack: run infra recon (AgentHound), auto-save "
                         "the discovered model/agent endpoints as targets, then print the "
@@ -960,6 +976,20 @@ def prompt_authorization():
         # Non-interactive stdin (pipe/CI) or Ctrl-C: treat as "not authorized".
         print()
         return False
+
+
+def require_authorization(args, action: str = "this operation") -> bool:
+    """Consent checkpoint for side-effectful / offensive operations — live scans,
+    infrastructure recon, and the model-stealing engine. Honors an explicit
+    non-interactive opt-in (--i-am-authorized or CRUCIBLE_AUTHORIZED=1); otherwise
+    prompts. Fails closed: on non-interactive stdin without the opt-in it returns
+    False. Unlike --auto's gate, --ci does NOT bypass this — the offensive paths
+    (recon / model-theft) must be explicitly authorized every time."""
+    if getattr(args, "i_am_authorized", False) or \
+            os.environ.get("CRUCIBLE_AUTHORIZED", "").strip().lower() in ("1", "true", "yes"):
+        return True
+    print(f"  {C.DIM('About to run')} {C.BOLD(action)}{C.DIM('.')}")
+    return prompt_authorization()
 
 
 def _slack_notify(webhook_url: str, text: str) -> bool:
@@ -1767,6 +1797,11 @@ def run(args):
     # ── --local / --offline: normalise to the local Ollama daemon (air-gap) ───
     _apply_local(args)
 
+    # ── --rps / --delay: client-side pacing (applies to every path, incl. --extract) ─
+    if getattr(args, "rps", None) or getattr(args, "delay", None):
+        engine.set_rate(rps=getattr(args, "rps", None) or 0.0,
+                        delay=getattr(args, "delay", None) or 0.0)
+
     # ── --evolve: the self-improving loop = dynamic + KB-augment + KB-grow ────
     if getattr(args, "evolve", False):
         args.dynamic = True
@@ -2012,6 +2047,8 @@ def run(args):
 
     # ── --discover: fingerprint the target, then exit ─────────────────────────
     if getattr(args, "discover", False):
+        if not require_authorization(args, "target discovery (live recon probes)"):
+            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); sys.exit(0)
         api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
         endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         schema   = args.schema or "openai"
@@ -2048,17 +2085,21 @@ def run(args):
         import agenthound
         full_stack = getattr(args, "full_stack", False)
 
+        if not require_authorization(args, "infrastructure recon (AgentHound)"):
+            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); sys.exit(0)
+
         recon_input = getattr(args, "recon_input", None)
         if recon_input:
             if not os.path.exists(recon_input):
                 print(f"  {C.RED('✗')} --recon-input file not found: {recon_input}")
                 sys.exit(2)
             try:
-                parsed = agenthound.parse(recon_input)
+                with open(recon_input, encoding="utf-8") as f:
+                    raw = json.load(f)
+                parsed = agenthound.parse(raw)
             except Exception as exc:
                 print(f"  {C.RED('✗')} Could not parse AgentHound JSON: {exc}")
                 sys.exit(2)
-            raw = None
         else:
             scope = getattr(args, "recon_scope", None) or args.endpoint \
                 or os.environ.get("CRUCIBLE_ENDPOINT", "")
@@ -2083,14 +2124,23 @@ def run(args):
             os.makedirs(out_dir, exist_ok=True)
             stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             recon_path = os.path.join(out_dir, f"recon_{stamp}.json")
+            recon_doc = {
+                "stats": parsed["stats"],
+                "findings": agenthound.redact_secrets(parsed["findings"]),
+                "endpoints": [agenthound.redact_secrets({k: v for k, v in e.items() if k != "raw"})
+                              for e in parsed["endpoints"]],
+                "attack_paths": agenthound.redact_secrets(parsed["paths"]),
+                "targets": agenthound.to_targets(parsed),
+            }
+            # The raw AgentHound blob can hold looted credentials — opt-in only,
+            # and redacted even then.
+            if getattr(args, "recon_save_raw", False) and raw is not None:
+                recon_doc["raw"] = agenthound.redact_secrets(raw)
             with open(recon_path, "w", encoding="utf-8") as f:
-                json.dump({"stats": parsed["stats"], "findings": parsed["findings"],
-                           "endpoints": [{k: v for k, v in e.items() if k != "raw"}
-                                         for e in parsed["endpoints"]],
-                           "attack_paths": parsed["paths"],
-                           "targets": agenthound.to_targets(parsed),
-                           "raw": raw}, f, indent=2)
-            print(f"  {C.GREEN('✓')} Recon saved → {C.CYAN(recon_path)}\n")
+                json.dump(recon_doc, f, indent=2)
+            note = "" if getattr(args, "recon_save_raw", False) else \
+                f"  {C.DIM('(raw blob omitted; --recon-save-raw to include, redacted)')}"
+            print(f"  {C.GREEN('✓')} Recon saved → {C.CYAN(recon_path)}{note}\n")
 
         discovered = agenthound.to_targets(parsed)
 
@@ -2123,6 +2173,8 @@ def run(args):
 
     # ── --extract: active model-stealing engine, then exit ────────────────────
     if getattr(args, "extract", False):
+        if not require_authorization(args, "the active model-stealing engine"):
+            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); sys.exit(0)
         api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
         endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         schema   = args.schema or "openai"
