@@ -1474,7 +1474,8 @@ def print_mutate_report(run_results: list) -> None:
     print(f"  {'─' * 68}")
 
     _vchr = {"FAIL": "FAIL", "WARN": "warn", "PASS": "pass", "ERROR": "err "}
-    _vcol = {"FAIL": C.RED, "WARN": C.YELLOW, "PASS": C.GREEN, "ERROR": C.DIM}
+    _vcol = {"FAIL": C.RED, "WARN": C.YELLOW, "PASS": C.GREEN, "ERROR": C.DIM,
+             "SILENT": C.DIM, "PARTIAL_REFUSAL": C.YELLOW}
 
     for tid, rows in sorted(by_test.items()):
         r0       = rows[0]
@@ -1963,7 +1964,8 @@ def _quick_test() -> None:
     try:
         verdict, reasoning = attacker.judge_response(payload, fake_response)
         elapsed = round(time.time() - t0, 1)
-        vcol = {"FAIL": C.RED, "WARN": C.YELLOW, "PASS": C.GREEN}.get(verdict, str)
+        vcol = {"FAIL": C.RED, "WARN": C.YELLOW, "PASS": C.GREEN, "ERROR": C.DIM,
+                "SILENT": C.DIM, "PARTIAL_REFUSAL": C.YELLOW}.get(verdict, str)
         print(f"  {C.GREEN('✓')} judge_response()  [{elapsed}s]")
         print(f"  {C.CYAN('Verdict:')}   {vcol(C.BOLD(verdict))}")
         print(f"  {C.CYAN('Reasoning:')} {C.DIM(reasoning[:160])}")
