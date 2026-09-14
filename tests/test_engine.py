@@ -153,9 +153,14 @@ def test_run_test_http_error_maps_to_error_verdict(monkeypatch, openai_config, s
 
 
 def test_run_test_connection_error_maps_to_error(monkeypatch, openai_config, sample_test):
+    monkeypatch.setattr(engine.time, "sleep", lambda *_a, **_k: None)  # don't wait on retry backoff
+    calls = {"n": 0}
+
     def _boom(*a, **k):
+        calls["n"] += 1
         raise engine.requests.exceptions.ConnectionError("no route")
     monkeypatch.setattr(engine.requests, "post", _boom)
-    out = engine.run_test(openai_config, sample_test)
+    out = engine.run_test(openai_config, sample_test, max_retries=3)
     assert out["verdict"] == "ERROR"
     assert "Connection failed" in out["error"]
+    assert calls["n"] == 3  # transient connection errors are now retried, not immediate

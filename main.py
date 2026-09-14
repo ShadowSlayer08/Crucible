@@ -624,6 +624,10 @@ def build_parser():
     p.add_argument("--delay", type=float, default=None, metavar="SEC",
                    help="Minimum delay (seconds) between requests to the target "
                         "(the larger of --delay / implied --rps interval wins).")
+    p.add_argument("--timeout", type=float, default=None, metavar="SEC",
+                   help="Per-request timeout in seconds (default 30). Raise for "
+                        "long-context / reasoning models that respond slowly, so a "
+                        "valid slow answer isn't turned into a false ERROR.")
     p.add_argument("--seed", type=int, default=None, metavar="N",
                    help="Seed all randomness (bandit / TAP / sampling) for reproducible runs")
     p.add_argument("--cache", action="store_true",
@@ -1133,7 +1137,7 @@ def execute_test(config, test):
                     "status_code": 200, "raw_response": None, "cached": True}
 
     tracker = config.get("_budget")
-    if tracker is not None and tracker.exceeded():
+    if tracker is not None and not tracker.try_reserve():
         tracker.note_skip()
         return {"verdict": "ERROR", "error": "skipped — budget/call limit reached",
                 "response_text": ""}
@@ -1159,8 +1163,8 @@ def execute_test(config, test):
         api = run_test(config, test)
 
     if tracker is not None:
-        tracker.record(config.get("schema", "custom"),
-                       test.get("payload", ""), api.get("response_text", "") or "")
+        tracker.record_usage(config.get("schema", "custom"),
+                             test.get("payload", ""), api.get("response_text", "") or "")
     if cache is not None and ckey and api.get("verdict") != "ERROR" \
             and api.get("response_text"):
         cache.put(ckey, api["response_text"])
@@ -1831,6 +1835,10 @@ def run(args):
     if getattr(args, "rps", None) or getattr(args, "delay", None):
         engine.set_rate(rps=getattr(args, "rps", None) or 0.0,
                         delay=getattr(args, "delay", None) or 0.0)
+
+    # ── --timeout: per-request timeout (applies to every path via engine default) ──
+    if getattr(args, "timeout", None):
+        engine.set_timeout(args.timeout)
 
     # ── --evolve: the self-improving loop = dynamic + KB-augment + KB-grow ────
     if getattr(args, "evolve", False):

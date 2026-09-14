@@ -19,6 +19,7 @@ import time
 import json
 import copy
 import ipaddress
+import random
 import threading
 from urllib.parse import urlparse
 import requests
@@ -314,6 +315,38 @@ def _throttle() -> None:
         _LAST_CALL[0] = time.monotonic()
 
 
+# ── Retry policy + request timeout ────────────────────────────────────────────
+# Transient server/network failures must be retried, not turned into a permanent
+# ERROR verdict — an uncounted ERROR silently deflates FAIL counts and corrupts
+# ASR@1/@N, the headline metric.
+_RETRYABLE_STATUS = {429, 500, 502, 503, 504, 529}
+_BACKOFF_BASE = 1.0      # seconds; attempt n waits ~ base * 2**n
+_BACKOFF_CAP = 30.0
+_JITTER = 0.5            # +[0, _JITTER) random seconds to avoid thundering herd
+_TIMEOUT = 30           # default per-request timeout (seconds); override via set_timeout / config
+
+
+def set_timeout(seconds) -> None:
+    """Set the default per-request timeout (seconds). Applies to every run_test call
+    whose config does not carry an explicit 'timeout'. 0/None restores the default."""
+    global _TIMEOUT
+    _TIMEOUT = int(seconds) if seconds else 30
+
+
+def _retry_delay(attempt: int, resp=None) -> float:
+    """Backoff for retry `attempt` (0-indexed). Honors a Retry-After header when the
+    server sends one (seconds form), else exponential backoff with jitter."""
+    if resp is not None:
+        ra = getattr(resp, "headers", {}) or {}
+        val = ra.get("Retry-After") if hasattr(ra, "get") else None
+        if val:
+            try:
+                return max(0.0, min(_BACKOFF_CAP, float(val)))
+            except (TypeError, ValueError):
+                pass
+    return min(_BACKOFF_CAP, _BACKOFF_BASE * (2 ** attempt)) + random.uniform(0, _JITTER)
+
+
 _LOCAL_HOSTNAMES = {"localhost", "ip6-localhost", "ip6-loopback", "host.docker.internal"}
 
 
@@ -382,14 +415,17 @@ def run_test(config: dict, test: dict, max_retries: int = 3,
         except Exception:
             pass  # unsupported schema / bad media → fall back to text-only body
 
+    timeout = config.get("timeout") or _TIMEOUT
     attempt = 0
     while attempt < max_retries:
         try:
             _throttle()   # client-side pacing (no-op unless set_rate() enabled it)
-            resp = requests.post(url, headers=headers, json=body, timeout=30)
+            resp = requests.post(url, headers=headers, json=body, timeout=timeout)
 
-            if resp.status_code == 429:
-                time.sleep(2 ** (attempt + 1))
+            # Retry transient statuses (429 + 5xx/529) with backoff, honoring
+            # Retry-After — but only while retries remain; otherwise fall through.
+            if resp.status_code in _RETRYABLE_STATUS and attempt < max_retries - 1:
+                time.sleep(_retry_delay(attempt, resp))
                 attempt += 1
                 continue
 
@@ -414,11 +450,18 @@ def run_test(config: dict, test: dict, max_retries: int = 3,
         except requests.exceptions.Timeout:
             attempt += 1
             if attempt >= max_retries:
-                return {"verdict": "ERROR", "error": "Timed out after retries", "response_text": ""}
-            time.sleep(2 ** attempt)
+                return {"verdict": "ERROR", "error": f"Timed out after {max_retries} attempts "
+                        f"(timeout={timeout}s)", "response_text": ""}
+            time.sleep(_retry_delay(attempt - 1))
 
         except requests.exceptions.ConnectionError as e:
-            return {"verdict": "ERROR", "error": f"Connection failed: {str(e)[:150]}", "response_text": ""}
+            # Transient network errors are retried too (was: immediate ERROR).
+            attempt += 1
+            if attempt >= max_retries:
+                return {"verdict": "ERROR",
+                        "error": f"Connection failed after {max_retries} attempts: {str(e)[:150]}",
+                        "response_text": ""}
+            time.sleep(_retry_delay(attempt - 1))
 
         except Exception as e:
             return {"verdict": "ERROR", "error": str(e)[:200], "response_text": ""}
