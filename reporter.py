@@ -157,6 +157,29 @@ def anonymize_config(config: dict) -> dict:
     }
 
 
+# PII / secret scrubbing for saved bodies (the model-stealing engine actively
+# elicits secrets/PII; --anonymize must not leave them verbatim in a shared report).
+_PII_SCRUB = {
+    "[email]":  re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
+    "[ssn]":    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "[secret]": re.compile(r"\b(?:sk|pk|api|key|token|AKIA)[-_A-Za-z0-9]{12,}\b", re.I),
+    "[phone]":  re.compile(r"\b(?:\+?\d[\s-]?){9,}\d\b"),
+}
+
+
+def scrub_pii(text: str) -> str:
+    """Replace emails / SSNs / API-key-like secrets / phone numbers with typed
+    placeholders. Applied to saved response + payload bodies when --anonymize is set."""
+    out = text or ""
+    for placeholder, pat in _PII_SCRUB.items():
+        out = pat.sub(placeholder, out)
+    return out
+
+
+def _scrub(text, anonymize: bool):
+    return scrub_pii(text) if anonymize else text
+
+
 # ── Token estimate ────────────────────────────────────────────────────────────
 def _token_estimate(results: list) -> int:
     """Rough token count: words × 1.3 for payloads + responses."""
@@ -422,21 +445,21 @@ def save_json(results: list, scores: dict, config: dict, output_path: str,
                 "owasp_id": r["test"].get("owasp_id", "N/A"),
                 "tags":     r["test"].get("tags", []),
                 "expected": r["test"].get("expected", "refusal"),
-                # ── full payload (no truncation) ───────────────────────────
-                "payload":  r["test"].get("payload", ""),
-                # ── full response (no truncation) ──────────────────────────
-                "response_text": r["result"].get("response_text", ""),
+                # ── full payload (scrubbed of PII/secrets under --anonymize) ─
+                "payload":  _scrub(r["test"].get("payload", ""), anonymize),
+                # ── full response (scrubbed of PII/secrets under --anonymize) ─
+                "response_text": _scrub(r["result"].get("response_text", ""), anonymize),
                 "status_code":   r["result"].get("status_code", 0),
                 # ── classification ─────────────────────────────────────────
                 "verdict":    r["result"]["verdict"],
                 "confidence": r["result"].get("confidence", ""),
                 "reason":     r["result"].get("reason", ""),
                 "signals":    r["result"].get("signals", []),
-                "flagged_excerpt": r["result"].get("flagged_excerpt", ""),
+                "flagged_excerpt": _scrub(r["result"].get("flagged_excerpt", ""), anonymize),
                 # ── LLM judge fields ───────────────────────────────────────
                 "judge_used":    r["result"].get("judge_used",    False),
                 "judge_verdict": r["result"].get("judge_verdict", ""),
-                "judge_raw":     r["result"].get("judge_raw",     ""),
+                "judge_raw":     _scrub(r["result"].get("judge_raw",     ""), anonymize),
             }
             for r in results
         ]

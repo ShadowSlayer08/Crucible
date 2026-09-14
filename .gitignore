@@ -50,6 +50,8 @@ Thumbs.db
 .ai-redteam-targets.yaml
 .ai-redteam-cache.db
 .ai-redteam-kb/
+.ai-redteam-audit.jsonl
+.ai-redteam-roe.yaml
 slm/training_data/
 slm/checkpoints/
 slm/eval_results/

@@ -1,0 +1,19 @@
+# Rules of Engagement (ROE) — scope confinement for REDai.
+#
+# Copy to `.ai-redteam-roe.yaml` (git-ignored) to ACTIVATE. When present, REDai
+# refuses any live target or recon scope not inside `authorized`, and stamps the
+# reference below into reports and the audit trail. No file = not enforced.
+#
+# `authorized` entries may be CIDRs, IPs, hosts (also matches sub.host), or URLs
+# (the host is compared). Loopback / localhost is always allowed (your own machine).
+# Override a single out-of-scope run with --roe-override (recorded in the audit trail).
+
+authorized:
+  - "10.10.0.0/16"                    # CIDR
+  - "192.168.1.50"                    # single IP
+  - "staging-llm.internal.example"   # host (also matches api.staging-llm.internal.example)
+  - "https://redteam.example.com"    # URL (host compared)
+
+expiry: "2026-12-31"                  # ISO date; runs are refused after this date
+authorizer: "Security Team — Jane Doe"
+ticket: "SEC-1234"

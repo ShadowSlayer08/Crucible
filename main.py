@@ -50,6 +50,8 @@ from extraction import run_extraction
 import local_engine
 import kb as kb_mod
 import notify
+import roe as roe_mod
+import audit as audit_mod
 from multiturn import run_multiturn
 from dynamic_engine import (
     AttackerLLM, DynamicRedTeamer,
@@ -869,6 +871,15 @@ def build_parser():
                         "(--recon/--full-stack/--extract/--discover). Equivalent to "
                         "answering 'yes' at the authorization prompt (or set "
                         "AI_RT_AUTHORIZED=1). --ci does NOT bypass these gates.")
+    p.add_argument("--roe", metavar="FILE",
+                   help="Rules-of-Engagement / scope file (default: auto-detect "
+                        ".ai-redteam-roe.yaml). When present, REDai refuses any live "
+                        "target or recon scope outside its authorized list.")
+    p.add_argument("--no-roe", action="store_true",
+                   help="Ignore any ROE file (disable scope confinement).")
+    p.add_argument("--roe-override", action="store_true",
+                   help="Proceed against an out-of-scope / expired ROE target anyway "
+                        "(recorded in the audit trail). Use only with explicit sign-off.")
     p.add_argument("--full-stack", action="store_true",
                    help="ONE tool, full stack: run infra recon (AgentHound), auto-save "
                         "the discovered model/agent endpoints as targets, RUN REDai's "
@@ -1024,6 +1035,28 @@ def require_authorization(args, action: str = "this operation") -> bool:
         return True
     print(f"  {C.DIM('About to run')} {C.BOLD(action)}{C.DIM('.')}")
     return prompt_authorization()
+
+
+def enforce_roe_and_audit(args, target: str, action: str, mode: str = None) -> bool:
+    """Enforce ROE scope confinement on *target* and write an audit-trail record for
+    this side-effectful action. Returns True if allowed; on an out-of-scope/expired
+    refusal it prints the reason, records a *-blocked* event, and returns False so the
+    caller can exit. Loopback/local targets and runs with no ROE file are allowed."""
+    roe_cfg = getattr(args, "_roe", None)
+    # Loopback / own-machine targets are always allowed (parity with the engine guard),
+    # so a ROE listing only remote infra never blocks local testing.
+    if target and engine._is_local_url(target):
+        ok, why = True, "local endpoint — scope not enforced"
+    else:
+        ok, why = roe_mod.enforce(target, roe_cfg, getattr(args, "roe_override", False))
+    ref = roe_mod.roe_ref(roe_cfg) if roe_cfg else ""
+    if not ok:
+        print(f"\n  {C.RED('✗ ' + why)}\n")
+        audit_mod.record(action + "-blocked", target, mode=mode, roe_ref=ref, authorized=False)
+        return False
+    audit_mod.record(action, target, mode=mode, roe_ref=ref, authorized=True,
+                     extra={"override": True} if getattr(args, "roe_override", False) else None)
+    return True
 
 
 def _slack_notify(webhook_url: str, text: str) -> bool:
@@ -1840,6 +1873,17 @@ def run(args):
     if getattr(args, "timeout", None):
         engine.set_timeout(args.timeout)
 
+    # ── Rules of Engagement: load the scope file and confine live calls to it ──
+    roe_cfg = None
+    if not getattr(args, "no_roe", False):
+        roe_cfg = roe_mod.load_roe(getattr(args, "roe", None))
+        if roe_cfg:
+            engine.set_scope(roe_mod.build_matcher(roe_cfg))
+            exp = "" if not roe_mod.is_expired(roe_cfg) else C.RED("  [EXPIRED]")
+            print(f"  {C.DIM('ROE active:')} {C.CYAN(roe_mod.roe_ref(roe_cfg))}{exp}  "
+                  f"{C.DIM('(' + str(len(roe_cfg.get('authorized') or roe_cfg.get('scope') or [])) + ' authorized scope(s))')}")
+    args._roe = roe_cfg   # stash for handlers/enforcement
+
     # ── --evolve: the self-improving loop = dynamic + KB-augment + KB-grow ────
     if getattr(args, "evolve", False):
         args.dynamic = True
@@ -2097,6 +2141,9 @@ def run(args):
         if not api_key and schema != "ollama":
             api_key = _read_line("  Enter API key: ", secret=True)
 
+        if not enforce_roe_and_audit(args, endpoint, "discover"):
+            sys.exit(4)
+
         config = {
             "api_key":       api_key or "",
             "endpoint":      endpoint.rstrip("/"),
@@ -2145,6 +2192,9 @@ def run(args):
                 print(f"  {C.RED('✗')} --recon needs --recon-scope (authorized infra "
                       f"CIDR/host/URL), or use --recon-input with an existing scan.")
                 sys.exit(2)
+            if not enforce_roe_and_audit(args, scope, "recon",
+                                         mode=getattr(args, "recon_mode", "stealth")):
+                sys.exit(4)
             print(f"  {C.DIM('Running AgentHound recon over')} {C.CYAN(scope)} "
                   f"{C.DIM('(' + getattr(args, 'recon_mode', 'stealth') + ')…')}")
             res = agenthound.run_scan(scope, mode=getattr(args, "recon_mode", "stealth"))
@@ -2248,6 +2298,9 @@ def run(args):
         if not api_key and schema != "ollama":
             api_key = _read_line("  Enter API key: ", secret=True)
 
+        if not enforce_roe_and_audit(args, endpoint, "extract"):
+            sys.exit(4)
+
         config = {
             "api_key":       api_key or "",
             "endpoint":      endpoint.rstrip("/"),
@@ -2298,6 +2351,8 @@ def run(args):
         if not prompt_authorization():
             print(f"\n  {C.RED('Aborted.')}\n")
             sys.exit(0)
+        if not enforce_roe_and_audit(args, config["endpoint"], "multi-turn"):
+            sys.exit(4)
 
         run_multiturn(
             config,
@@ -2336,6 +2391,10 @@ def run(args):
                 if ":" in hdr:
                     k, _, v = hdr.partition(":")
                     config["extra_headers"][k.strip()] = v.strip()
+
+        if not enforce_roe_and_audit(args, config["endpoint"], "crescendo",
+                                     mode=getattr(args, "crescendo_category", "Jailbreak")):
+            sys.exit(4)
 
         attacker = AttackerLLM(model=getattr(args, "attacker_model", "kimi-k2"),
                                endpoint=getattr(args, "attacker_endpoint", "http://localhost:11434"))
@@ -2702,6 +2761,12 @@ def run(args):
         if not prompt_authorization():
             print(f"\n  {C.RED('Aborted.')}\n")
             sys.exit(0)
+
+    # ── ROE scope confinement + audit for the main behavioural sweep ──────────
+    # (dry-run makes no calls; skip. The engine guard is a backstop for every call.)
+    if not args.dry_run and config.get("endpoint"):
+        if not enforce_roe_and_audit(args, config["endpoint"], "scan", mode=mode):
+            sys.exit(4)
 
     if args.dry_run:
         n = len(tests)
