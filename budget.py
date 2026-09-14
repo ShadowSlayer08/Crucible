@@ -44,19 +44,50 @@ class BudgetTracker:
         self.skipped = 0
         self._lock = Lock()
 
+    def _exceeded_locked(self) -> bool:
+        if self.limit_usd is not None and self.cost >= self.limit_usd:
+            return True
+        if self.max_calls is not None and self.calls >= self.max_calls:
+            return True
+        return False
+
     def exceeded(self) -> bool:
         with self._lock:
-            if self.limit_usd is not None and self.cost >= self.limit_usd:
-                return True
-            if self.max_calls is not None and self.calls >= self.max_calls:
-                return True
-            return False
+            return self._exceeded_locked()
+
+    def try_reserve(self) -> bool:
+        """Atomically check the limit AND reserve a call slot under one lock.
+
+        Returns True (and counts the call) if firing is allowed, False if the
+        budget/call limit is already reached. This closes the check-then-act race:
+        under --concurrency, callers that use exceeded()+record() separately can
+        each pass the check before any records, overshooting max_calls by up to
+        (concurrency-1) live billable calls. try_reserve() makes the decision and
+        the increment a single critical section, so max_calls is a HARD ceiling.
+        (limit_usd is still best-effort: response cost is only known post-call.)"""
+        with self._lock:
+            if self._exceeded_locked():
+                return False
+            self.calls += 1
+            return True
 
     def note_skip(self) -> None:
         with self._lock:
             self.skipped += 1
 
+    def record_usage(self, schema: str, prompt: str, response: str) -> None:
+        """Record tokens + cost for a call already reserved via try_reserve()
+        (does NOT increment `calls` — the reservation counted it)."""
+        it, ot = _tokens(prompt), _tokens(response)
+        in_p, out_p = COST_PER_1K.get(schema, COST_PER_1K["custom"])
+        c = it / 1000 * in_p + ot / 1000 * out_p
+        with self._lock:
+            self.in_tokens += it
+            self.out_tokens += ot
+            self.cost += c
+
     def record(self, schema: str, prompt: str, response: str) -> None:
+        """Count a call AND its tokens/cost in one step (non-reserved path)."""
         it, ot = _tokens(prompt), _tokens(response)
         in_p, out_p = COST_PER_1K.get(schema, COST_PER_1K["custom"])
         c = it / 1000 * in_p + ot / 1000 * out_p
