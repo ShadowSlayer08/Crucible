@@ -458,7 +458,7 @@ def print_verbose(test, api_result, classification):
             print(f"    {line}")
         print(f"\n  {C.YELLOW('── VERDICT ─────────────────────────────────────────')}")
         verdict = classification.get("verdict", "ERROR")
-        vcol    = {"PASS": C.GREEN, "FAIL": C.RED, "WARN": C.YELLOW, "ERROR": C.DIM}.get(verdict, str)
+        vcol    = {"PASS": C.GREEN, "FAIL": C.RED, "WARN": C.YELLOW, "ERROR": C.DIM, "SILENT": C.DIM, "PARTIAL_REFUSAL": C.YELLOW}.get(verdict, str)
         print(f"    Verdict    : {vcol(C.BOLD(verdict))}")
         print(f"    Confidence : {classification.get('confidence','?')}")
         print(f"    Reason     : {classification.get('reason','')}")
@@ -1059,6 +1059,30 @@ def enforce_roe_and_audit(args, target: str, action: str, mode: str = None) -> b
     return True
 
 
+def _parse_extra_headers(args) -> dict:
+    """Parse --extra-header 'Key: Value' pairs into a dict (shared by every path so
+    compare/auto no longer silently drop them)."""
+    out = {}
+    for hdr in (getattr(args, "extra_headers", None) or []):
+        if ":" in hdr:
+            k, _, v = hdr.partition(":")
+            out[k.strip()] = v.strip()
+    return out
+
+
+def _apply_custom_overrides(config: dict, args) -> None:
+    """Copy --custom-* overrides into *config* when schema == custom (previously only
+    the main run did this, so --schema custom was broken on compare/auto/extract)."""
+    if config.get("schema") != "custom":
+        return
+    if getattr(args, "custom_url_path", None):
+        config["custom_url_path"] = args.custom_url_path
+    if getattr(args, "custom_auth_header", None):
+        config["custom_auth_header"] = args.custom_auth_header
+    if getattr(args, "custom_response_path", None):
+        config["custom_response_path"] = args.custom_response_path
+
+
 def _slack_notify(webhook_url: str, text: str) -> bool:
     """Best-effort Slack webhook POST. Never raises."""
     try:
@@ -1441,9 +1465,11 @@ def run_compare_mode(args, tests: list, mode: str) -> None:
         key_b = getpass.getpass(f"  API key for Model B ({model_b}): ").strip()
 
     cfg_a = {"api_key": key_a or "", "endpoint": ep_a.rstrip("/"),
-             "model": model_a, "schema": schema_a, "extra_headers": {}}
+             "model": model_a, "schema": schema_a, "extra_headers": _parse_extra_headers(args)}
     cfg_b = {"api_key": key_b or "", "endpoint": ep_b.rstrip("/"),
-             "model": model_b, "schema": schema_b, "extra_headers": {}}
+             "model": model_b, "schema": schema_b, "extra_headers": _parse_extra_headers(args)}
+    _apply_custom_overrides(cfg_a, args)
+    _apply_custom_overrides(cfg_b, args)
 
     # ── Config summary ─────────────────────────────────────────────────────────
     print(f"\n  {C.BOLD('COMPARE MODE')}  —  {C.BOLD(mode.upper())}  —  {len(tests)} tests\n")
@@ -1577,10 +1603,15 @@ def _reconstruct_results_from_json(json_results: list) -> list:
             "flagged_excerpt": e.get("flagged_excerpt",  ""),
             "response_text":   e.get("response_text",   ""),
             "status_code":     e.get("status_code",     0),
+            "detected_failure_mode": e.get("detected_failure_mode", ""),
+            "task_completed":        e.get("task_completed"),
             "judge_used":      e.get("judge_used",      False),
             "judge_verdict":   e.get("judge_verdict",   ""),
             "judge_raw":       e.get("judge_raw",       ""),
         }
+        for _k in ("n_samples", "asr1_fail", "asrn_fail", "n_fail"):
+            if _k in e:
+                result[_k] = e[_k]
         out.append({"test": test, "result": result})
     return out
 
@@ -2113,9 +2144,13 @@ def run(args):
         if not api_key and schema not in ("ollama", "browser"):
             api_key = _read_line("  Enter API key: ", secret=True)
         auto_cfg = {"api_key": api_key or "", "endpoint": endpoint.rstrip("/"),
-                    "model": args.model, "schema": schema, "extra_headers": {}}
+                    "model": args.model, "schema": schema,
+                    "extra_headers": _parse_extra_headers(args)}
+        _apply_custom_overrides(auto_cfg, args)
         if not getattr(args, "ci", False) and not prompt_authorization():
             print(f"\n  {C.RED('Aborted.')}\n"); sys.exit(0)
+        if not enforce_roe_and_audit(args, auto_cfg["endpoint"], "auto"):
+            sys.exit(4)
         auto.run_auto(
             auto_cfg,
             attacker_endpoint=getattr(args, "attacker_endpoint", None),

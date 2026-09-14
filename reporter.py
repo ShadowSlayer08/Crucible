@@ -49,6 +49,9 @@ def verdict_color(verdict: str) -> str:
         "FAIL":  C.RED(prefix + verdict),
         "WARN":  C.YELLOW(prefix + verdict),
         "ERROR": C.DIM(prefix + verdict),
+        # classifier also emits these — previously they rendered uncolored everywhere
+        "SILENT":          C.DIM(prefix + verdict),
+        "PARTIAL_REFUSAL": C.YELLOW(prefix + verdict),
     }.get(verdict, verdict)
 
 
@@ -213,7 +216,7 @@ def print_detailed_test(test: dict, result: dict) -> None:
     Used during --detailed live run and in the final report sections.
     """
     verdict    = result.get("verdict", "ERROR")
-    vcol       = {"PASS": C.GREEN, "FAIL": C.RED, "WARN": C.YELLOW, "ERROR": C.DIM}.get(verdict, str)
+    vcol       = {"PASS": C.GREEN, "FAIL": C.RED, "WARN": C.YELLOW, "ERROR": C.DIM, "SILENT": C.DIM, "PARTIAL_REFUSAL": C.YELLOW}.get(verdict, str)
     sev        = test.get("severity", "Low")
     atlas_id   = test.get("atlas_id", "N/A") or "N/A"
     atlas_name = test.get("atlas_name", "")
@@ -456,6 +459,11 @@ def save_json(results: list, scores: dict, config: dict, output_path: str,
                 "reason":     r["result"].get("reason", ""),
                 "signals":    r["result"].get("signals", []),
                 "flagged_excerpt": _scrub(r["result"].get("flagged_excerpt", ""), anonymize),
+                "detected_failure_mode": r["result"].get("detected_failure_mode", ""),
+                "task_completed":        r["result"].get("task_completed"),
+                # ── ASR@1/@N sampling (present only with --samples > 1) ─────
+                **({k: r["result"][k] for k in ("n_samples", "asr1_fail", "asrn_fail", "n_fail")
+                    if k in r["result"]}),
                 # ── LLM judge fields ───────────────────────────────────────
                 "judge_used":    r["result"].get("judge_used",    False),
                 "judge_verdict": r["result"].get("judge_verdict", ""),
@@ -1186,7 +1194,7 @@ def print_compare_report(
     print(f"{'═' * W}")
 
     # ── Per-test diff sections ────────────────────────────────────────────────
-    VCOL = {"PASS": C.GREEN, "FAIL": C.RED, "WARN": C.YELLOW, "ERROR": C.DIM}
+    VCOL = {"PASS": C.GREEN, "FAIL": C.RED, "WARN": C.YELLOW, "ERROR": C.DIM, "SILENT": C.DIM, "PARTIAL_REFUSAL": C.YELLOW}
     SCOL = {"Critical": C.RED, "High": C.MAGENTA, "Medium": C.YELLOW, "Low": C.DIM}
 
     def _diff_section(title: str, items: list, note: str = "") -> None:
@@ -1463,7 +1471,7 @@ def print_retry_comparison(source_name: str, retry_count: int,
             still.append(entry)
 
     SCOL = {"Critical": C.RED, "High": C.MAGENTA, "Medium": C.YELLOW, "Low": C.DIM}
-    VCOL = {"PASS": C.GREEN, "FAIL": C.RED, "WARN": C.YELLOW, "ERROR": C.DIM}
+    VCOL = {"PASS": C.GREEN, "FAIL": C.RED, "WARN": C.YELLOW, "ERROR": C.DIM, "SILENT": C.DIM, "PARTIAL_REFUSAL": C.YELLOW}
     _SORD = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 
     def _section(title: str, items: list, hdr_col) -> None:
