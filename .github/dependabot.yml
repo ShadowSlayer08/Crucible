@@ -1,0 +1,18 @@
+# Keep dependencies + GitHub Actions current and patched (supply-chain hardening).
+# A security tool that handles target credentials is itself a high-value target;
+# unpinned transitive deps / mutable action tags are the attack surface Dependabot
+# watches. Reviewers still gate every bump via PR.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "security"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["ci", "security"]

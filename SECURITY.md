@@ -12,9 +12,21 @@ provider Terms of Service, and professional ethics codes.
 
 Before any run against a third-party endpoint:
 - Confirm you have authorization and a defined scope.
-- Prefer local targets (Ollama) for experimentation.
-- Use `--budget` / `--max-calls` to cap spend and blast radius.
-- Use `--anonymize` when sharing reports.
+- **Define a Rules-of-Engagement file** (`.ai-redteam-roe.yaml`; see
+  `.ai-redteam-roe.example.yaml`). When present, REDai **refuses** any live target or
+  recon scope outside the authorized CIDRs/hosts and after the ROE's expiry, and
+  stamps the reference into the audit trail. Override a single run only with
+  `--roe-override` (recorded).
+- Prefer local targets (Ollama) for experimentation; loopback is always in-scope.
+- Use `--budget` / `--max-calls` (a hard ceiling, even under `--concurrency`) and
+  `--rps` / `--delay` to cap spend and blast radius against a target.
+- The offensive paths (`--recon` / `--full-stack` / `--extract` / `--discover`)
+  require authorization every run — interactively, or `--i-am-authorized` /
+  `AI_RT_AUTHORIZED=1` for automation (`--ci` does **not** bypass them).
+- Every side-effectful run is recorded to an append-only audit trail
+  (`.ai-redteam-audit.jsonl`): operator, time, action, target host, mode, ROE ref.
+- Use `--anonymize` when sharing reports — it redacts the endpoint/key and **scrubs
+  emails, SSNs, API-key-like secrets and phone numbers** from saved response bodies.
 
 ## What the tool does and does not do
 
