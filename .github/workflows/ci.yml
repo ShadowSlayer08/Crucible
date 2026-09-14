@@ -1,0 +1,54 @@
+name: CI
+
+# Runs the full test suite on every push/PR (previously nothing proved the suite
+# was green) plus a supply-chain job: dependency vulnerability audit + CycloneDX SBOM.
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - name: Run tests
+        run: pytest -q
+
+  supply-chain:
+    name: dependency audit + SBOM
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e "." pip-audit cyclonedx-bom
+      - name: Dependency vulnerability audit (pip-audit)
+        # Surface advisories as annotations; don't hard-fail a source-available tool's build.
+        continue-on-error: true
+        run: pip-audit --desc
+      - name: Generate CycloneDX SBOM
+        continue-on-error: true
+        run: cyclonedx-py environment -o sbom.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+          if-no-files-found: ignore
