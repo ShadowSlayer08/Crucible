@@ -280,6 +280,16 @@ def set_offline(flag: bool = True) -> None:
     _OFFLINE = bool(flag)
 
 
+_SCOPE = None  # optional predicate(url)->bool — ROE scope confinement (roe.build_matcher)
+
+
+def set_scope(matcher) -> None:
+    """Confine live calls to endpoints the matcher allows (Rules of Engagement).
+    Pass None to disable. Loopback endpoints are always allowed (own machine)."""
+    global _SCOPE
+    _SCOPE = matcher
+
+
 # ── Client-side rate limiting ────────────────────────────────────────────────
 # So a sweep (esp. the up-to-10-way concurrent path, plus extraction which calls
 # run_test directly) can't exhaust or knock over a smaller self-hosted target.
@@ -397,6 +407,12 @@ def run_test(config: dict, test: dict, max_retries: int = 3,
         return {"verdict": "ERROR", "response_text": "", "raw_response": None,
                 "status_code": 0,
                 "error": f"offline mode: blocked non-local endpoint ({url})"}
+    # ROE scope guard: refuse any non-local endpoint outside the authorized scope.
+    if _SCOPE is not None and schema_name != "browser" \
+            and not _is_local_url(url) and not _SCOPE(url):
+        return {"verdict": "ERROR", "response_text": "", "raw_response": None,
+                "status_code": 0,
+                "error": f"blocked: endpoint out of ROE scope ({url})"}
     headers = _resolve_headers(schema, config)
     body    = _resolve_body(schema, config, message)
 

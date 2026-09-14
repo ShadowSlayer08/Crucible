@@ -437,6 +437,16 @@ def _send_turn(config: dict, history: list[dict], max_retries: int = 2) -> dict:
         if config.get("custom_response_path"): schema["response_path"] = config["custom_response_path"]
 
     url     = _resolve_url(schema, config)
+    # Air-gap + ROE scope guards (parity with engine.run_test) for the multi-turn
+    # transport used by --multi-turn and --crescendo.
+    import engine as _eng
+    if _eng._OFFLINE and schema_name != "browser" and not _eng._is_local_url(url):
+        return {"response_text": "", "status_code": 0,
+                "error": f"offline mode: blocked non-local endpoint ({url})"}
+    if _eng._SCOPE is not None and schema_name != "browser" \
+            and not _eng._is_local_url(url) and not _eng._SCOPE(url):
+        return {"response_text": "", "status_code": 0,
+                "error": f"blocked: endpoint out of ROE scope ({url})"}
     headers = _resolve_headers(schema, config)
     body    = _build_multiturn_body(schema, config, history)
 
