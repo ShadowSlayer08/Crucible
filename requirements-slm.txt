@@ -5,7 +5,7 @@
 # Then:  pip install -r requirements-slm.txt
 
 # core fine-tuning (the peft path — works on Linux AND native Windows) ----------
-transformers>=4.44
+transformers>=5.17.0
 peft>=0.12
 trl>=0.9
 accelerate>=0.33
