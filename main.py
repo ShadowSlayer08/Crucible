@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════╗
-║           AI RED TEAM CLI — v2.4                         ║
+║           AI RED TEAM CLI (REDai) — v3.0.0               ║
 ║  VAPT | Red Team | ATLAS | OWASP | Discovery | MultiTurn ║
 ╚══════════════════════════════════════════════════════════╝
 
@@ -128,10 +128,13 @@ print_lock = Lock()
 # BANNER
 # ─────────────────────────────────────────────────────────────────────────────
 
+__version__ = "3.0.0"
+
+
 def banner():
     return f"""
 {C.CYAN('╔══════════════════════════════════════════════════════════╗')}
-{C.CYAN('║')}  {C.BOLD('AI RED TEAM CLI')}  ·  v3.0                                 {C.CYAN('║')}
+{C.CYAN('║')}  {C.BOLD('AI RED TEAM CLI')}  ·  v{__version__}                               {C.CYAN('║')}
 {C.CYAN('║')}  VAPT | RedTeam | ATLAS | OWASP | MCP | Agentic | RAG  {C.CYAN('║')}
 {C.CYAN('╚══════════════════════════════════════════════════════════╝')}
 
@@ -471,11 +474,13 @@ def print_verbose(test, api_result, classification):
 
 def build_parser():
     p = argparse.ArgumentParser(
-        prog="ai-redteam",
-        description="AI Red Team CLI v2.2",
+        prog="redai",
+        description=f"AI Red Team CLI (REDai) v{__version__}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
+    p.add_argument("--version", action="version", version=f"redai {__version__}",
+                   help="Print the REDai version and exit")
 
     # mode + target
     p.add_argument("--mode", choices=[
