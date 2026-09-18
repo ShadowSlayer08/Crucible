@@ -159,7 +159,7 @@ def test_index_serves_dashboard(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
-    assert "AI Red Team" in r.text
+    assert "CRUCIBLE" in r.text
 
 
 # ── helper-level checks (pure functions) ───────────────────────────────────

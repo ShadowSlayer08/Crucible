@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/crucible-card.svg" alt="CRUCIBLE — Adversarial AI, tested." width="720">
+  <img src="docs/assets/crucible-card.svg" alt="CRUCIBLE — Trial by fire for AI." width="720">
 </p>
 
 <h1 align="center">CRUCIBLE — CRUCIBLE · v3.0.0</h1>
@@ -18,7 +18,7 @@ infrastructure recon, and a web dashboard.
 ## Install
 
 CRUCIBLE is source-available (not on PyPI). Clone it and install with pip — the console
-script is **`crucible`**.
+script is **`crucible`** (short alias: `cru`).
 
 ```bash
 git clone <this-repo> crucible && cd crucible
@@ -36,8 +36,8 @@ Install profiles (extras are additive):
 | `pip install -e ".[all]"` | pdf + server + docs |
 | `pip install -e ".[dev]"` | everything above + pytest |
 
-All three invocations are equivalent: **`crucible …`** (installed script), `python -m crucible`
-is **not** available — use `crucible` or `python main.py …` from the repo.
+Both are equivalent: **`crucible …`** (installed script) or `python main.py …` from the
+repo. `python -m crucible` is **not** available — use `crucible` or the file entrypoint.
 
 ```bash
 crucible --version          # crucible 3.0.0

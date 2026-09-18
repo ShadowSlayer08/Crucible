@@ -3,10 +3,10 @@
        GET  /modes  /schemas  /tests?mode=
        POST /scan            (dry-run cost estimate, or full live scan)
        POST /scan/stream     (Server-Sent Events, live per-test results)
-     Serve it with:  python -m crucible --serve      (or python server.py) -->
+     Serve it with:  crucible --serve      (or python server.py) -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CRUCIBLE — Dashboard</title>
+<title>CRUCIBLE — AI Red Team Dashboard</title>
 <style>
   :root {
     --bg:#0d0f16; --panel:#161923; --panel2:#1b1f2b; --border:#2a2f3d;
@@ -112,7 +112,7 @@
 </style>
 
 <header>
-  <h1>AI Red Team<span class="dot"> ●</span> CLI</h1>
+  <h1>CRUC<span class="dot">I</span>BLE</h1>
   <span class="ver" id="ver">v—</span>
   <div class="status"><span class="pulse" id="pulse"></span><span id="statusText">connecting…</span></div>
 </header>

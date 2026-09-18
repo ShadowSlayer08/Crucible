@@ -227,7 +227,7 @@ def _run_live_scan(mode: str, tests: list, config: dict) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="CRUCIBLE — REST API",
+        title="CRUCIBLE — AI Red Team REST API",
         version=API_VERSION,
         description="API-first wrapper over the engine, classifier, and payload suites.",
     )
