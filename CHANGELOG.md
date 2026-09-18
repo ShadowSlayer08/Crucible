@@ -37,7 +37,7 @@ The v3 line turns the CLI into a full black-box AI red-team platform. See
 - AgentHound bridge: `--recon` / `--full-stack` discover exposed AI infra and sweep
   it, emitting one unified infra+behaviour report (JSON + SARIF) with correlated
   chained findings and an attack-path graph.
-- Reporting: JSON / CSV / SARIF 2.1.0 / PDF; ASR@1/@N with Wilson CIs, coverage grids,
+- Reporting: JSON / CSV / SARIF 2.1.0 / PDF; ASR@1 / ASR@N with Wilson CIs, coverage grids,
   benchmark deltas, threat ontology, transferability, SQLite trend history.
 - Web: `--serve` FastAPI + SSE dashboard, plus a React SPA (`frontend/`).
 - Frameworks: MITRE ATLAS, OWASP LLM Top 10 + Agentic, NIST AI RMF, SOC2/ISO42001/EU AI Act.

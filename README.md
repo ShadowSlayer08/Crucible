@@ -114,7 +114,7 @@ Plus **declarative** composition: `--vuln A,B --attack X,Y` → a 14×14 vuln ×
 - **Full stack, one tool.** `--recon` bridges [AgentHound](https://github.com/adithyan-ak/AgentHound)
   to find exposed MCP/LiteLLM/Ollama/vLLM/Qdrant/MLflow services; **`--full-stack`** then sweeps them
   behaviourally and emits **one** report chaining *reachable* infra to *exploitable* behaviour.
-- **Numbers that survive scrutiny.** ASR@1/@N with Wilson CIs, coverage grids, published-baseline
+- **Numbers that survive scrutiny.** ASR@1 / ASR@N with Wilson CIs, coverage grids, published-baseline
   deltas, SARIF for code-scanning, a branded PDF for the readout.
 
 ---
