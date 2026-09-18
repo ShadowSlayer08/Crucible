@@ -6,7 +6,7 @@
 
 # core fine-tuning (the peft path — works on Linux AND native Windows) ----------
 transformers>=4.44
-peft>=0.12
+peft>=0.21.0
 trl>=0.9
 accelerate>=0.33
 datasets>=2.20
