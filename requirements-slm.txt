@@ -10,7 +10,7 @@ peft>=0.12
 trl>=0.9
 accelerate>=0.33
 datasets>=2.20
-bitsandbytes>=0.43        # 4-bit quant; Windows wheels exist (else use WSL2)
+bitsandbytes>=0.50.2        # 4-bit quant; Windows wheels exist (else use WSL2)
 
 # faster + far less VRAM (Linux / WSL2; native-Windows support is limited) ------
 # unsloth                 # pip install unsloth  → 2-4x faster, ~70% less VRAM
