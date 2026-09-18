@@ -1,4 +1,8 @@
-# REDai — AI Red Team CLI · v3.0.0
+<p align="center">
+  <img src="docs/assets/redai-card.svg" alt="REDai — Adversarial AI, tested." width="720">
+</p>
+
+<h1 align="center">REDai — AI Red Team CLI · v3.0.0</h1>
 
 Black-box adversarial testing for AI / LLM systems. REDai fires structured attack
 suites at any chat/completions endpoint, classifies the responses, and reports risk
