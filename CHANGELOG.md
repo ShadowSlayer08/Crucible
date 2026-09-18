@@ -26,6 +26,10 @@ The v3 line turns the CLI into a full black-box AI red-team platform. See
 - SLM pipeline (`slm/`): dataset collection → LoRA fine-tune → GGUF/Ollama export →
   **Wilson-CI A/B ship gate** → versioning; `python -m slm.pipeline` closes the loop
   with promote-iff-SHIP. MoE merge via mergekit.
+- **Anti-forgetting training recipe** (`slm/train.py`): all-linear LoRA targets (incl.
+  MLP), optional DoRA/rsLoRA, and general-instruction **replay mixing** (`--replay-ratio`,
+  default 0.3) so a small-data fine-tune keeps base ability instead of collapsing — the
+  root-cause fix for the KEEP-base A/B result.
 
 ### Added — full stack & reporting
 - Model-artifact supply-chain scanner (`--model-scan`) and active model-stealing
