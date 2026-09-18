@@ -87,14 +87,14 @@ keep the effective batch, and/or drop `--max-seq-length` (e.g. 1024). `train()` 
 ## 4. Export to Ollama, then PROVE it
 
 ```bash
-python -m slm.export --checkpoint slm/checkpoints --model-name redai-slm
-#   → merges LoRA, converts to GGUF (Q4_K_M), writes a Modelfile, `ollama create redai-slm`
+python -m slm.export --checkpoint slm/checkpoints --model-name crucible-slm
+#   → merges LoRA, converts to GGUF (Q4_K_M), writes a Modelfile, `ollama create crucible-slm`
 #   (use --dry-run first to see the exact commands; --modelfile-only to skip the build)
 
 # THE decision — no GPU needed, pure Ollama orchestration:
 python -m slm.evaluate \
   --base microsoft/Phi-3-mini-4k-instruct \
-  --slm redai-slm \
+  --slm crucible-slm \
   --target qwen2.5:7b
 ```
 
@@ -118,7 +118,7 @@ e.g. collect after `--evolve --mode rag`, `--mode pismith`, …), fuse them:
 ```bash
 python -m slm.merge --check-env
 python -m slm.merge \
-  --experts redai-slm-inject,redai-slm-jailbreak,redai-slm-rag \
+  --experts crucible-slm-inject,crucible-slm-jailbreak,crucible-slm-rag \
   --base-model microsoft/Phi-3-mini-4k-instruct \
   --method moe --dry-run          # preview the mergekit-moe config + command
 python -m slm.merge --experts ... --method moe    # run it (mergekit + GPU)
@@ -152,7 +152,7 @@ record manually — it's `slm/versioning.py`.)
                                               ↘ slm.merge (MoE) ↗
 ```
 
-Run it, then feed the new SLM back in as `--attacker-model redai-slm` on the next
+Run it, then feed the new SLM back in as `--attacker-model crucible-slm` on the next
 `--evolve` — that's the compounding flywheel.
 
 > **Scope:** the SLM is a red-team **attacker** that generates adversarial test

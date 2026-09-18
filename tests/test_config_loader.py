@@ -73,6 +73,6 @@ def test_generate_template_writes_utf8(tmp_path):
 
 
 def test_find_config_explicit_path(tmp_path):
-    p = tmp_path / ".ai-redteam.yaml"
+    p = tmp_path / ".crucible.yaml"
     p.write_text("model: x\n", encoding="utf-8")
     assert config_loader.find_config(str(p)) == str(p)

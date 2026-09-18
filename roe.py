@@ -6,7 +6,7 @@ from being aimed at unauthorized infrastructure (fat-finger, wrong CIDR) — and
 credential-looting recon and an active model-stealing engine now bundled, an
 unconstrained scope is the gap between an engagement and a CFAA violation.
 
-If a `.ai-redteam-roe.yaml` exists (or is passed via --roe / $AI_RT_ROE), REDai
+If a `.crucible-roe.yaml` exists (or is passed via --roe / $CRUCIBLE_ROE), CRUCIBLE
 refuses any live target or recon scope not inside the authorized list, and stamps
 the ROE reference into reports/audit. No ROE file → not enforced (opt-in), so
 existing workflows are unaffected until an operator adds one.
@@ -34,7 +34,7 @@ import ipaddress
 import os
 from urllib.parse import urlparse
 
-DEFAULT_ROE_FILE = os.environ.get("AI_RT_ROE", ".ai-redteam-roe.yaml")
+DEFAULT_ROE_FILE = os.environ.get("CRUCIBLE_ROE", ".crucible-roe.yaml")
 
 
 def load_roe(path: str = None):

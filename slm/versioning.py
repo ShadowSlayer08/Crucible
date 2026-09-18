@@ -2,7 +2,7 @@
 slm/versioning.py — version control for the local red-team SLM (Phase 6C, roadmap #78).
 
 Every LoRA fine-tune of the local red-team SLM produces a new model checkpoint
-(exported to Ollama as e.g. "redai-slm:v3"). This module is the registry that
+(exported to Ollama as e.g. "crucible-slm:v3"). This module is the registry that
 tracks those checkpoints: what base model + how much data + how many epochs made
 each one, how it scored on the two held-out evals (attack ASR, judge accuracy),
 which Ollama model name it maps to, and which one is currently "active" (the one

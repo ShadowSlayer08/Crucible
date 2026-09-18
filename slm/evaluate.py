@@ -2,7 +2,7 @@
 slm/evaluate.py — SLM-vs-base benchmark + A/B harness (roadmap #77 / #81).
 
 This is the scoreboard for Phase 6C's self-improving loop. The whole premise of
-fine-tuning a local red-team SLM (train it on the attacks REDai already found, so
+fine-tuning a local red-team SLM (train it on the attacks CRUCIBLE already found, so
 the *next* run is stronger) is only worth the GPU hours if the fine-tuned model
 actually out-attacks its base. This module produces that number honestly: it runs
 two Ollama models as *attackers*, fires their generated payloads at the *same*
@@ -22,7 +22,7 @@ Public API:
     print_eval_report(result)                              -> None   (colourised A/B report)
 
 CLI:
-    python -m slm.evaluate --base qwen2.5:7b --slm redai-slm:latest --target llama3.2:3b
+    python -m slm.evaluate --base qwen2.5:7b --slm crucible-slm:latest --target llama3.2:3b
 """
 
 import argparse
@@ -578,8 +578,8 @@ def main(argv=None):
                     "(no torch / no GPU needed — pure orchestration).")
     ap.add_argument("--base", default="qwen2.5:7b",
                     help="Base attacker model (default: qwen2.5:7b)")
-    ap.add_argument("--slm", default="redai-slm:latest",
-                    help="Fine-tuned SLM attacker model (default: redai-slm:latest)")
+    ap.add_argument("--slm", default="crucible-slm:latest",
+                    help="Fine-tuned SLM attacker model (default: crucible-slm:latest)")
     ap.add_argument("--target", default="llama3.2:3b",
                     help="Target model(s) both attackers fire at — comma-separate for a "
                          "multi-target sweep with per-target + pooled ASR (default: llama3.2:3b)")

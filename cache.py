@@ -15,7 +15,7 @@ import os
 import sqlite3
 from threading import Lock
 
-CACHE_FILE = os.environ.get("AI_RT_CACHE", ".ai-redteam-cache.db")
+CACHE_FILE = os.environ.get("CRUCIBLE_CACHE", ".crucible-cache.db")
 
 
 class ResponseCache:

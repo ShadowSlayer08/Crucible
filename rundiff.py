@@ -5,8 +5,8 @@ Trend tracks the score delta; this answers the operationally important question:
 *which specific attacks newly broke, and which got fixed?* Compares two runs by
 test id and verdict.
 
-    redai --mode redteam ... --diff reports/redteam_prev.json   # current vs a prior report
-    redai --diff-reports reports/a.json,reports/b.json          # two saved reports, no run
+    crucible --mode redteam ... --diff reports/redteam_prev.json   # current vs a prior report
+    crucible --diff-reports reports/a.json,reports/b.json          # two saved reports, no run
 """
 import colors as C
 
@@ -37,7 +37,7 @@ def diff(prev_results: list, curr_results: list) -> dict:
 
 
 def load_report(path: str) -> list:
-    """Return the results list from a saved REDai JSON report."""
+    """Return the results list from a saved CRUCIBLE JSON report."""
     import json
     with open(path, encoding="utf-8") as f:
         data = json.load(f)

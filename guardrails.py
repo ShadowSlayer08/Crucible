@@ -1,5 +1,5 @@
 """
-Production Guardrails  —  roadmap G7  (turns REDai purple-team)
+Production Guardrails  —  roadmap G7  (turns CRUCIBLE purple-team)
 
 Deployable, rule-based input/output filters PLUS a purple-team evaluator that
 answers: of the attacks that beat the raw model, how many would these guards have

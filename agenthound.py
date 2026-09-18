@@ -1,13 +1,13 @@
 """
 agenthound.py — bridge to AgentHound (infra-layer AI attack-surface recon).
 
-REDai red-teams model/agent *behaviour*; AgentHound
+CRUCIBLE red-teams model/agent *behaviour*; AgentHound
 (github.com/adithyan-ak/AgentHound, Apache-2.0, Go) maps the AI *infrastructure* —
 exposed MCP / LiteLLM / Ollama / vLLM / Qdrant / MLflow / Jupyter / Open-WebUI
 services, credential chains, and BloodHound-style attack paths. This adapter runs
 AgentHound (or ingests a JSON scan it already produced) and folds its findings into
-REDai's model: it surfaces the infra findings AND hands the discovered model/agent
-endpoints to REDai's behavioural red-team. One tool, full stack.
+CRUCIBLE's model: it surfaces the infra findings AND hands the discovered model/agent
+endpoints to CRUCIBLE's behavioural red-team. One tool, full stack.
 
 AgentHound stays its own upstream project (credited, Apache-2.0) — we wrap its JSON
 output, never fuse code. Offensive / authorized-use only. Running the Go binary and
@@ -60,7 +60,7 @@ def redact_secrets(obj, mask: str = _REDACTED):
         return [redact_secrets(x, mask) for x in obj]
     return obj
 
-# Service type -> (REDai schema, suggested --mode). Types that expose an LLM/agent
+# Service type -> (CRUCIBLE schema, suggested --mode). Types that expose an LLM/agent
 # chat surface become behavioural targets; pure-infra stores (qdrant/mlflow/…) do not.
 _LLM_SERVICE_SCHEMA = {
     "ollama":     ("ollama", "vapt"),
@@ -74,7 +74,7 @@ _LLM_SERVICE_SCHEMA = {
     "mcp":        ("openai", "mcp"),
     "a2a":        ("openai", "agentic"),
 }
-# Infra-only services AgentHound reports but REDai doesn't behaviourally test.
+# Infra-only services AgentHound reports but CRUCIBLE doesn't behaviourally test.
 _INFRA_ONLY = {"qdrant", "mlflow", "jupyter", "neo4j", "chroma", "weaviate", "pinecone"}
 
 # Rough infra-finding -> framework tags (best-effort).
@@ -199,9 +199,9 @@ def _tag_finding(text: str):
 # BRIDGE TO BEHAVIOURAL TESTING
 # ─────────────────────────────────────────────────────────────────────────────
 def to_targets(parsed: dict) -> list:
-    """Map AgentHound-discovered LLM/agent endpoints to REDai target dicts, so the
+    """Map AgentHound-discovered LLM/agent endpoints to CRUCIBLE target dicts, so the
     behavioural red-team can sweep everything recon found. Infra-only stores
-    (Qdrant/MLflow/…) are excluded — AgentHound tests those, not REDai's behaviour."""
+    (Qdrant/MLflow/…) are excluded — AgentHound tests those, not CRUCIBLE's behaviour."""
     targets = []
     seen = set()
     for i, e in enumerate(parsed.get("endpoints", []), 1):

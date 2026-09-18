@@ -1,12 +1,12 @@
-# REDai Frontend — React + Vite
+# CRUCIBLE Frontend — React + Vite
 
-A component-based dashboard for the AI Red Team CLI, built on React 18 + Vite 5.
+A component-based dashboard for the CRUCIBLE, built on React 18 + Vite 5.
 It is a **thin client** over the same REST API (`server.py`) that the bundled
 zero-build dashboard uses — nothing here re-implements engine logic.
 
 > **Two frontends, one API.** The project ships a fully self-contained
 > [`web/index.html`](../web/index.html) dashboard that needs **no build step** —
-> `python -m redai --serve` serves it immediately. This `frontend/` directory is
+> `python -m crucible --serve` serves it immediately. This `frontend/` directory is
 > the optional richer, component-based version for teams that want to extend the
 > UI. Use whichever fits; both call the identical endpoints.
 
@@ -15,7 +15,7 @@ zero-build dashboard uses — nothing here re-implements engine logic.
 Start the backend first (serves the API on `:8000`):
 
 ```bash
-python -m redai --serve            # or: python server.py
+python -m crucible --serve            # or: python server.py
 ```
 
 Then, in this directory:

@@ -1,4 +1,4 @@
-// Thin client for the AI Red Team CLI REST API (server.py).
+// Thin client for the CRUCIBLE REST API (server.py).
 // Same paths the zero-build dashboard uses; CORS is enabled server-side and
 // the Vite dev server also proxies them, so these work in dev and in a build.
 

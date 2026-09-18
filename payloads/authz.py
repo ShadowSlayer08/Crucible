@@ -1,7 +1,7 @@
 """
 Authorization Attack Surface  (DeepTeam parity — access-control vulnerabilities)
 
-Covers the access-control class DeepTeam tests and REDai was missing:
+Covers the access-control class DeepTeam tests and CRUCIBLE was missing:
 BOLA / BFLA / RBAC bypass / SSRF / Debug-access / Shell-injection / Cross-context.
 All framed at the attack-vector level (no operational exploit detail).
 Maps to OWASP LLM06 (Excessive Agency) / LLM08, MITRE AML.T0053/T0055.

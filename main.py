@@ -21,7 +21,7 @@ New in v2.2:
   --no-color            Strip ANSI colors (CI/file output)
   --search <keyword>    Filter tests by keyword
   --config <file>       Load defaults from YAML config file
-  --generate-config     Write a starter .ai-redteam.yaml
+  --generate-config     Write a starter .crucible.yaml
   --ci                  Exit code 1 if score exceeds threshold
   --ci-threshold N      Score threshold for CI failure (default: 30)
   --resume              Resume last interrupted run from checkpoint
@@ -380,7 +380,7 @@ def _export_payloads(payloads, schema, path):
                       f, indent=2, ensure_ascii=False)
     else:
         with open(path, "w", encoding="utf-8") as f:
-            f.write(f"AI Red Team CLI — Payload Export\nSchema: {schema}\nCount: {len(payloads)}\n{'='*70}\n\n")
+            f.write(f"CRUCIBLE — Payload Export\nSchema: {schema}\nCount: {len(payloads)}\n{'='*70}\n\n")
             for p in payloads:
                 f.write(f"[{p['id']}] {p['name']}\nSeverity: {p['severity']}\n"
                         f"Category: {p['category']}\nRationale: {p['rationale']}\n"
@@ -475,7 +475,7 @@ def print_verbose(test, api_result, classification):
 def build_parser():
     p = argparse.ArgumentParser(
         prog="crucible",
-        description=f"CRUCIBLE — AI Red Team CLI · Trial by fire for AI · v{__version__}",
+        description=f"CRUCIBLE — CRUCIBLE · Trial by fire for AI · v{__version__}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -571,7 +571,7 @@ def build_parser():
 
     # ── Phase 6B — self-growing knowledge base ────────────────────────────────
     p.add_argument("--kb-dir", metavar="DIR", default=kb_mod.DEFAULT_DIR,
-                   help="Knowledge-base directory (default: .ai-redteam-kb)")
+                   help="Knowledge-base directory (default: .crucible-kb)")
     p.add_argument("--kb-augmented", action="store_true",
                    help="Dynamic mode: retrieve proven attacks from the KB to craft custom payloads")
     p.add_argument("--kb-grow", action="store_true",
@@ -678,9 +678,9 @@ def build_parser():
 
     # ── NEW: config ──────────────────────────────────────────────────────────
     p.add_argument("--config",           metavar="FILE",
-                   help="Path to YAML config file (default: auto-detect .ai-redteam.yaml)")
+                   help="Path to YAML config file (default: auto-detect .crucible.yaml)")
     p.add_argument("--generate-config",  action="store_true",
-                   help="Write a starter .ai-redteam.yaml config file and exit")
+                   help="Write a starter .crucible.yaml config file and exit")
     p.add_argument("--no-config",        action="store_true",
                    help="Ignore any config file even if found")
 
@@ -725,7 +725,7 @@ def build_parser():
                    help="In --watch, POST to this Slack webhook on a score regression")
     p.add_argument("--alert-email", metavar="ADDR",
                    help="In --watch, email this address on a score regression "
-                        "(SMTP via AI_RT_SMTP_HOST/PORT/USER/PASS/FROM)")
+                        "(SMTP via CRUCIBLE_SMTP_HOST/PORT/USER/PASS/FROM)")
     p.add_argument("--watch-save",   action="store_true",
                    help="In --watch, save a JSON report each cycle")
 
@@ -793,7 +793,7 @@ def build_parser():
     p.add_argument("--endpoint-a", metavar="URL",
                    help="Endpoint URL for Model A (compare mode)")
     p.add_argument("--api-key-a",  metavar="KEY",
-                   help="API key for Model A (or env AI_RT_API_KEY_A)")
+                   help="API key for Model A (or env CRUCIBLE_API_KEY_A)")
     p.add_argument("--model-a",    metavar="MODEL",  default="gpt-4o",
                    help="Model name for endpoint A (default: gpt-4o)")
     p.add_argument("--schema-a",   metavar="SCHEMA",
@@ -802,7 +802,7 @@ def build_parser():
     p.add_argument("--endpoint-b", metavar="URL",
                    help="Endpoint URL for Model B (compare mode)")
     p.add_argument("--api-key-b",  metavar="KEY",
-                   help="API key for Model B (or env AI_RT_API_KEY_B)")
+                   help="API key for Model B (or env CRUCIBLE_API_KEY_B)")
     p.add_argument("--model-b",    metavar="MODEL",  default="gpt-4o",
                    help="Model name for endpoint B (default: gpt-4o)")
     p.add_argument("--schema-b",   metavar="SCHEMA",
@@ -851,7 +851,7 @@ def build_parser():
                    help="INFRA-layer recon via AgentHound (github.com/adithyan-ak/"
                         "AgentHound). Discovers exposed MCP/LiteLLM/Ollama/vLLM/Qdrant/"
                         "MLflow/Jupyter/Open-WebUI services + credential chains + "
-                        "attack paths across --recon-scope, folds them into REDai's "
+                        "attack paths across --recon-scope, folds them into CRUCIBLE's "
                         "frameworks, and lists the model/agent endpoints found. "
                         "Requires the 'agenthound' binary (or use --recon-input). "
                         "Offensive / authorized-use only.")
@@ -865,8 +865,8 @@ def build_parser():
                    help="AgentHound scan mode: stealth = read-only (default), "
                         "active = probes services.")
     p.add_argument("--recon-to-targets", action="store_true",
-                   help="Save every discovered model/agent endpoint to the REDai target "
-                        "book (redai-targets.yaml) so you can sweep them by name.")
+                   help="Save every discovered model/agent endpoint to the CRUCIBLE target "
+                        "book (crucible-targets.yaml) so you can sweep them by name.")
     p.add_argument("--recon-save-raw", action="store_true",
                    help="Also persist AgentHound's raw scan blob in the recon report "
                         "(redacted). OFF by default — the raw blob can contain looted "
@@ -875,10 +875,10 @@ def build_parser():
                    help="Non-interactive authorization opt-in for the offensive paths "
                         "(--recon/--full-stack/--extract/--discover). Equivalent to "
                         "answering 'yes' at the authorization prompt (or set "
-                        "AI_RT_AUTHORIZED=1). --ci does NOT bypass these gates.")
+                        "CRUCIBLE_AUTHORIZED=1). --ci does NOT bypass these gates.")
     p.add_argument("--roe", metavar="FILE",
                    help="Rules-of-Engagement / scope file (default: auto-detect "
-                        ".ai-redteam-roe.yaml). When present, REDai refuses any live "
+                        ".crucible-roe.yaml). When present, CRUCIBLE refuses any live "
                         "target or recon scope outside its authorized list.")
     p.add_argument("--no-roe", action="store_true",
                    help="Ignore any ROE file (disable scope confinement).")
@@ -887,7 +887,7 @@ def build_parser():
                         "(recorded in the audit trail). Use only with explicit sign-off.")
     p.add_argument("--full-stack", action="store_true",
                    help="ONE tool, full stack: run infra recon (AgentHound), auto-save "
-                        "the discovered model/agent endpoints as targets, RUN REDai's "
+                        "the discovered model/agent endpoints as targets, RUN CRUCIBLE's "
                         "behavioural red-team against each, and emit ONE unified report "
                         "(infra + behaviour under shared ATLAS/OWASP/NIST, with chained "
                         "findings + attack-path graph). Add --no-sweep to only print the "
@@ -1031,12 +1031,12 @@ def prompt_authorization():
 def require_authorization(args, action: str = "this operation") -> bool:
     """Consent checkpoint for side-effectful / offensive operations — live scans,
     infrastructure recon, and the model-stealing engine. Honors an explicit
-    non-interactive opt-in (--i-am-authorized or AI_RT_AUTHORIZED=1); otherwise
+    non-interactive opt-in (--i-am-authorized or CRUCIBLE_AUTHORIZED=1); otherwise
     prompts. Fails closed: on non-interactive stdin without the opt-in it returns
     False. Unlike --auto's gate, --ci does NOT bypass this — the offensive paths
     (recon / model-theft) must be explicitly authorized every time."""
     if getattr(args, "i_am_authorized", False) or \
-            os.environ.get("AI_RT_AUTHORIZED", "").strip().lower() in ("1", "true", "yes"):
+            os.environ.get("CRUCIBLE_AUTHORIZED", "").strip().lower() in ("1", "true", "yes"):
         return True
     print(f"  {C.DIM('About to run')} {C.BOLD(action)}{C.DIM('.')}")
     return prompt_authorization()
@@ -1107,7 +1107,7 @@ def _read_line(prompt: str, default: str = "", secret: bool = False) -> str:
     except (EOFError, KeyboardInterrupt):
         print(f"\n  {C.RED('Input required but stdin is not interactive.')} "
               f"Supply it via flags/env (e.g. --endpoint / --api-key, "
-              f"AI_RT_ENDPOINT / AI_RT_API_KEY) and re-run.\n")
+              f"CRUCIBLE_ENDPOINT / CRUCIBLE_API_KEY) and re-run.\n")
         sys.exit(2)
 
 
@@ -1451,14 +1451,14 @@ def run_compare_mode(args, tests: list, mode: str) -> None:
     endpoints, then print a side-by-side breakdown and save compare JSON.
     """
     # ── Resolve A/B credentials + endpoints ───────────────────────────────────
-    ep_a = getattr(args, "endpoint_a", None) or os.environ.get("AI_RT_ENDPOINT_A", "")
-    ep_b = getattr(args, "endpoint_b", None) or os.environ.get("AI_RT_ENDPOINT_B", "")
+    ep_a = getattr(args, "endpoint_a", None) or os.environ.get("CRUCIBLE_ENDPOINT_A", "")
+    ep_b = getattr(args, "endpoint_b", None) or os.environ.get("CRUCIBLE_ENDPOINT_B", "")
     if not ep_a or not ep_b:
         print(f"  {C.RED('--compare requires --endpoint-a and --endpoint-b')}\n")
         sys.exit(1)
 
-    key_a    = getattr(args, "api_key_a",  None) or os.environ.get("AI_RT_API_KEY_A", "")
-    key_b    = getattr(args, "api_key_b",  None) or os.environ.get("AI_RT_API_KEY_B", "")
+    key_a    = getattr(args, "api_key_a",  None) or os.environ.get("CRUCIBLE_API_KEY_A", "")
+    key_b    = getattr(args, "api_key_b",  None) or os.environ.get("CRUCIBLE_API_KEY_B", "")
     model_a  = getattr(args, "model_a",   "gpt-4o")  or "gpt-4o"
     model_b  = getattr(args, "model_b",   "gpt-4o")  or "gpt-4o"
     schema_a = getattr(args, "schema_a",  "openai")  or "openai"
@@ -1680,10 +1680,10 @@ def run_retry_mode(args) -> None:
 
     # ── Resolve config (CLI args > report metadata) ───────────────────────────
     api_key  = (args.api_key
-                or os.environ.get("AI_RT_API_KEY")
+                or os.environ.get("CRUCIBLE_API_KEY")
                 or "")
     endpoint = (args.endpoint
-                or os.environ.get("AI_RT_ENDPOINT")
+                or os.environ.get("CRUCIBLE_ENDPOINT")
                 or metadata.get("endpoint", ""))
     # Only override model/schema from metadata if the user left them at defaults
     model  = args.model  if args.model  != "gpt-4o"  else metadata.get("model",  args.model)
@@ -2000,13 +2000,13 @@ def _dispatch(args) -> 'int | None':
               f"{'Deleted target ' + args.delete_target if ok else 'No such target.'}\n")
         return 0
     if getattr(args, "save_target", None):
-        ep = args.endpoint or os.environ.get("AI_RT_ENDPOINT", "")
+        ep = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         if not ep:
             print(f"  {C.RED('--save-target needs --endpoint')} (and --model/--schema).\n")
             return 1
         path = targets_mod.save_target(args.save_target, ep.rstrip("/"), args.model, args.schema)
         print(f"  {C.GREEN('✓')} Saved target '{C.CYAN(args.save_target)}' → {path}  "
-              f"{C.DIM('(key not stored — pass --api-key / AI_RT_API_KEY at run time)')}\n")
+              f"{C.DIM('(key not stored — pass --api-key / CRUCIBLE_API_KEY at run time)')}\n")
         return 0
     if getattr(args, "target", None):
         if not targets_mod.apply_target(args, args.target):
@@ -2017,7 +2017,7 @@ def _dispatch(args) -> 'int | None':
 
     # ── --generate-config ─────────────────────────────────────────────────────
     if args.generate_config:
-        generate_config_template(".ai-redteam.yaml")
+        generate_config_template(".crucible.yaml")
         return 0
 
     # ── --generate-template ───────────────────────────────────────────────────
@@ -2153,8 +2153,8 @@ def _dispatch(args) -> 'int | None':
     # ── --auto: autonomous red-team loop, then exit ───────────────────────────
     if getattr(args, "auto", False):
         import auto
-        api_key  = args.api_key or os.environ.get("AI_RT_API_KEY", "")
-        endpoint = args.endpoint or os.environ.get("AI_RT_ENDPOINT", "")
+        api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
+        endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         schema   = args.schema or "openai"
         if not endpoint:
             hint     = "http://localhost:11434" if schema == "ollama" else "https://api.openai.com"
@@ -2184,8 +2184,8 @@ def _dispatch(args) -> 'int | None':
     if getattr(args, "discover", False):
         if not require_authorization(args, "target discovery (live recon probes)"):
             print(f"\n  {C.RED('Aborted — authorization required.')}\n"); return 0
-        api_key  = args.api_key or os.environ.get("AI_RT_API_KEY", "")
-        endpoint = args.endpoint or os.environ.get("AI_RT_ENDPOINT", "")
+        api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
+        endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         schema   = args.schema or "openai"
 
         if not endpoint:
@@ -2240,7 +2240,7 @@ def _dispatch(args) -> 'int | None':
                 return 2
         else:
             scope = getattr(args, "recon_scope", None) or args.endpoint \
-                or os.environ.get("AI_RT_ENDPOINT", "")
+                or os.environ.get("CRUCIBLE_ENDPOINT", "")
             if not scope:
                 print(f"  {C.RED('✗')} --recon needs --recon-scope (authorized infra "
                       f"CIDR/host/URL), or use --recon-input with an existing scan.")
@@ -2294,7 +2294,7 @@ def _dispatch(args) -> 'int | None':
                     extra={"service": t.get("service"), "suggested_mode": t.get("suggested_mode"),
                            "auth": t.get("auth"), "source": "agenthound-recon"})
             print(f"  {C.GREEN('✓')} Saved {C.BOLD(str(len(discovered)))} discovered "
-                  f"endpoint(s) to the target book (redai-targets.yaml)\n")
+                  f"endpoint(s) to the target book (crucible-targets.yaml)\n")
 
         if full_stack:
             import fullstack
@@ -2308,7 +2308,7 @@ def _dispatch(args) -> 'int | None':
                 print(f"{'═' * 78}")
                 for t in discovered:
                     key = "" if t["schema"] == "ollama" else " --api-key $KEY"
-                    print(f"    {C.CYAN('redai')} --target {t['name']} --mode "
+                    print(f"    {C.CYAN('crucible')} --target {t['name']} --mode "
                           f"{t['suggested_mode']}{key}")
                 print("\n  " + C.DIM("(--no-sweep) run the lines above to execute the "
                                      "behavioural layer.") + "\n")
@@ -2341,8 +2341,8 @@ def _dispatch(args) -> 'int | None':
     if getattr(args, "extract", False):
         if not require_authorization(args, "the active model-stealing engine"):
             print(f"\n  {C.RED('Aborted — authorization required.')}\n"); return 0
-        api_key  = args.api_key or os.environ.get("AI_RT_API_KEY", "")
-        endpoint = args.endpoint or os.environ.get("AI_RT_ENDPOINT", "")
+        api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
+        endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         schema   = args.schema or "openai"
 
         if not endpoint:
@@ -2378,8 +2378,8 @@ def _dispatch(args) -> 'int | None':
 
     # ── --multi-turn: adversarial conversation scenarios, then exit ───────────
     if getattr(args, "multi_turn", False):
-        api_key  = args.api_key or os.environ.get("AI_RT_API_KEY", "")
-        endpoint = args.endpoint or os.environ.get("AI_RT_ENDPOINT", "")
+        api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
+        endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         schema   = args.schema or "openai"
 
         if not endpoint:
@@ -2428,8 +2428,8 @@ def _dispatch(args) -> 'int | None':
             print(f"  {C.RED('✗')} --crescendo needs --crescendo-goal.")
             return 2
 
-        api_key  = args.api_key or os.environ.get("AI_RT_API_KEY", "")
-        endpoint = args.endpoint or os.environ.get("AI_RT_ENDPOINT", "")
+        api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
+        endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         schema   = args.schema or "openai"
         if not endpoint:
             hint     = "http://localhost:11434" if schema == "ollama" else "https://api.openai.com"
@@ -2666,7 +2666,7 @@ def run_main_pipeline(args):
     # ── --search ──────────────────────────────────────────────────────────────
     if args.search:
         tests = search_tests(tests, args.search)
-        if args.list_tests or not (args.api_key or os.environ.get("AI_RT_API_KEY")):
+        if args.list_tests or not (args.api_key or os.environ.get("CRUCIBLE_API_KEY")):
             print_search_results(tests, args.search)
             return 0
         else:
@@ -2740,13 +2740,13 @@ def run_main_pipeline(args):
     if ci_mode:
         print(f"  CI mode     : {C.CYAN('ON')}  threshold={ci_threshold}")
     if use_checkpoint:
-        print(f"  Checkpoint  : {C.DIM('auto-saving to ' + '.ai-redteam-checkpoint.json')}")
+        print(f"  Checkpoint  : {C.DIM('auto-saving to ' + '.crucible-checkpoint.json')}")
     print()
 
     # ── Credentials ───────────────────────────────────────────────────────────
-    api_key = args.api_key or os.environ.get("AI_RT_API_KEY")
+    api_key = args.api_key or os.environ.get("CRUCIBLE_API_KEY")
     if args.ci and not api_key:
-        print("CI mode requires AI_RT_API_KEY env var or --api-key")
+        print("CI mode requires CRUCIBLE_API_KEY env var or --api-key")
         return 1
     if not api_key and schema not in ("ollama", "browser"):
         api_key = _read_line("  Enter API key: ", secret=True)
@@ -2758,7 +2758,7 @@ def run_main_pipeline(args):
     if schema == "browser":
         endpoint = getattr(args, "browser_url", None) or "browser://ui"
     else:
-        endpoint = args.endpoint or os.environ.get("AI_RT_ENDPOINT")
+        endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT")
         if not endpoint:
             hint = "http://localhost:11434" if schema == "ollama" else "https://api.openai.com"
             endpoint = _read_line(f"  Enter endpoint [{hint}]: ", default=hint)

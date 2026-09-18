@@ -159,7 +159,7 @@ def generate_template(path: str, fmt: str = "yaml"):
         ], indent=2)
     else:
         template = """\
-# AI Red Team CLI — Custom Payload File
+# CRUCIBLE — Custom Payload File
 # Severity: Critical | High | Medium | Low
 # Expected:  refusal | safe_response
 #

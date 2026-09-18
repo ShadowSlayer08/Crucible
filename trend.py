@@ -19,7 +19,7 @@ from datetime import datetime
 
 import colors as C
 
-DB_FILE = os.environ.get("AI_RT_HISTORY_DB", ".ai-redteam-history.db")
+DB_FILE = os.environ.get("CRUCIBLE_HISTORY_DB", ".crucible-history.db")
 
 
 def _endpoint_hash(endpoint: str) -> str:

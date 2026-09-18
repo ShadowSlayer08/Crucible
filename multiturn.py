@@ -1,5 +1,5 @@
 """
-Multi-Turn Attack Scenario Engine — AI Red Team CLI
+Multi-Turn Attack Scenario Engine — CRUCIBLE
 
 Executes 5 adversarial conversation scenarios that build conversation history
 across sequential turns to test whether context manipulation, persona injection,
@@ -815,7 +815,7 @@ def save_multiturn_json(scenario_results: list[dict], config: dict,
     doc = {
         "metadata": {
             "timestamp":       datetime.now().isoformat(),
-            "tool":            "AI Red Team CLI — Multi-Turn Mode",
+            "tool":            "CRUCIBLE — Multi-Turn Mode",
             "endpoint":        config.get("endpoint", ""),
             "model":           config.get("model", ""),
             "schema":          config.get("schema", ""),

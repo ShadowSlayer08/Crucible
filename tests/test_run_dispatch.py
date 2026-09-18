@@ -16,11 +16,11 @@ MAIN = os.path.join(ROOT, "main.py")
 
 def _code(args, stdin="", roe_authorized=None):
     env = dict(os.environ)
-    env.pop("AI_RT_AUTHORIZED", None)
+    env.pop("CRUCIBLE_AUTHORIZED", None)
     env.pop("PYTHONUTF8", None)
     env.pop("PYTHONIOENCODING", None)
-    env["AI_RT_HISTORY_DB"] = os.path.join(tempfile.gettempdir(), "crucible_dispatch_hist.db")
-    env["AI_RT_AUDIT"] = os.path.join(tempfile.gettempdir(), "crucible_dispatch_audit.jsonl")
+    env["CRUCIBLE_HISTORY_DB"] = os.path.join(tempfile.gettempdir(), "crucible_dispatch_hist.db")
+    env["CRUCIBLE_AUDIT"] = os.path.join(tempfile.gettempdir(), "crucible_dispatch_audit.jsonl")
     proc = subprocess.run(
         [sys.executable, MAIN, *args, "--no-config"],
         cwd=ROOT, env=env, input=stdin, capture_output=True, text=True,

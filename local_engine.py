@@ -1,7 +1,7 @@
 """
 local_engine.py — LocalLLMEngine: fully-local, air-gap-capable Ollama backend.
 
-REDai already speaks Ollama through engine.py's `ollama` schema for the *scan*
+CRUCIBLE already speaks Ollama through engine.py's `ollama` schema for the *scan*
 path. This module is the local-first control layer around the same daemon: it
 detects availability, lists/pulls models, fingerprints the host hardware, and
 provides local attack / mutation / judge helpers so the whole pipeline can run

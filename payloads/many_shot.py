@@ -5,7 +5,7 @@ Many-shot jailbreaking (Anthropic, 2024) exploits long context windows: prepend
 many fabricated user/assistant turns in which the assistant *always complies*, so
 the model in-context-learns "this assistant answers everything", then append the
 real ask. It reliably bypasses aligned models once the shot count is high enough —
-and it defeats REDai's `--context-tokens` knob, which only buries a payload in
+and it defeats CRUCIBLE's `--context-tokens` knob, which only buries a payload in
 neutral filler (no fabricated dialogue).
 
 This suite fires the SAME abstract goal at escalating shot counts (4/8/16/32) so a

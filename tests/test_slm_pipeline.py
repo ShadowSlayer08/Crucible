@@ -55,7 +55,7 @@ def test_train_missing_dataset_is_graceful(tmp_path):
 
 # ── export.py ────────────────────────────────────────────────────────────────
 def test_build_modelfile_text_pure():
-    txt = export.build_modelfile_text("model.gguf", model_name="redai-slm",
+    txt = export.build_modelfile_text("model.gguf", model_name="crucible-slm",
                                       system_prompt="be a red teamer")
     assert "FROM model.gguf" in txt                      # (a comment header precedes FROM)
     assert "SYSTEM" in txt and "be a red teamer" in txt

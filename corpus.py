@@ -2,7 +2,7 @@
 corpus.py — load external red-team prompt corpora as tests (roadmap #25).
 
 Lets an operator plug a large public corpus (e.g. AllenAI's WildJailbreak, ~50K
-prompts) into REDai without bundling it: point --load-corpus at the file you
+prompts) into CRUCIBLE without bundling it: point --load-corpus at the file you
 downloaded and it becomes test cases (and can seed the knowledge base). This
 complements — rather than replaces — the curated suites and the self-growing KB.
 
@@ -100,7 +100,7 @@ def _label(row: dict) -> str:
 
 def load_corpus(path: str, fmt: str = "auto", prompt_col: str = None,
                 limit: int = None) -> list:
-    """Load a corpus file into REDai test dicts. Never raises on a bad row — skips it."""
+    """Load a corpus file into CRUCIBLE test dicts. Never raises on a bad row — skips it."""
     if not os.path.exists(path):
         raise FileNotFoundError(f"corpus not found: {path}")
     fmt = _detect_fmt(path, fmt)

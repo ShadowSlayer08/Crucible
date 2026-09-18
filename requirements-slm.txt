@@ -1,5 +1,5 @@
 # ── Phase 6C SLM training stack (slm/train.py, export.py, merge.py) ───────────
-# ONLY needed on the GPU box that fine-tunes the model. The rest of REDai runs
+# ONLY needed on the GPU box that fine-tunes the model. The rest of CRUCIBLE runs
 # without any of this. Install CUDA-enabled PyTorch FIRST (match your CUDA build):
 #   https://pytorch.org/get-started/locally/   e.g. pip install torch --index-url https://download.pytorch.org/whl/cu121
 # Then:  pip install -r requirements-slm.txt

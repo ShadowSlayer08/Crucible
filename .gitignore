@@ -1,7 +1,7 @@
 # ── Secrets & local config (never commit real endpoints/keys) ────────────────
-.ai-redteam.yaml
-.ai-redteam-checkpoint.json
-.ai-redteam-history.db
+.crucible.yaml
+.crucible-checkpoint.json
+.crucible-history.db
 *.env
 .env
 
@@ -47,11 +47,11 @@ Thumbs.db
 
 # Local Claude Code settings (user-specific)
 .claude/settings.local.json
-.ai-redteam-targets.yaml
-.ai-redteam-cache.db
-.ai-redteam-kb/
-.ai-redteam-audit.jsonl
-.ai-redteam-roe.yaml
+.crucible-targets.yaml
+.crucible-cache.db
+.crucible-kb/
+.crucible-audit.jsonl
+.crucible-roe.yaml
 slm/training_data/
 slm/checkpoints/
 slm/eval_results/

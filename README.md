@@ -1,27 +1,27 @@
 <p align="center">
-  <img src="docs/assets/redai-card.svg" alt="REDai — Adversarial AI, tested." width="720">
+  <img src="docs/assets/crucible-card.svg" alt="CRUCIBLE — Trial by fire for AI." width="720">
 </p>
 
-<h1 align="center">REDai — AI Red Team CLI · v3.0.0</h1>
+<h1 align="center">CRUCIBLE — CRUCIBLE · v3.0.0</h1>
 
-Black-box adversarial testing for AI / LLM systems. REDai fires structured attack
+Black-box adversarial testing for AI / LLM systems. CRUCIBLE fires structured attack
 suites at any chat/completions endpoint, classifies the responses, and reports risk
 mapped to **MITRE ATLAS**, the **OWASP LLM Top 10** (+ Agentic), **NIST AI RMF**, and
 **Llama-Guard S1–S14** — with adaptive attackers, a local-first self-improving loop,
 infrastructure recon, and a web dashboard.
 
-> **Authorized testing only.** Run REDai solely against systems you own or have
+> **Authorized testing only.** Run CRUCIBLE solely against systems you own or have
 > explicit written permission to test. See [SECURITY.md](SECURITY.md).
 
 ---
 
 ## Install
 
-REDai is source-available (not on PyPI). Clone it and install with pip — the console
-script is **`redai`**.
+CRUCIBLE is source-available (not on PyPI). Clone it and install with pip — the console
+script is **`crucible`** (short alias: `cru`).
 
 ```bash
-git clone <this-repo> redai && cd redai
+git clone <this-repo> crucible && cd crucible
 pip install -e ".[all]"        # CLI + PDF + web server + docs export
 ```
 
@@ -36,12 +36,12 @@ Install profiles (extras are additive):
 | `pip install -e ".[all]"` | pdf + server + docs |
 | `pip install -e ".[dev]"` | everything above + pytest |
 
-All three invocations are equivalent: **`redai …`** (installed script), `python -m redai`
-is **not** available — use `redai` or `python main.py …` from the repo.
+Both are equivalent: **`crucible …`** (installed script) or `python main.py …` from the
+repo. `python -m crucible` is **not** available — use `crucible` or the file entrypoint.
 
 ```bash
-redai --version          # redai 3.0.0
-redai --help             # full flag reference
+crucible --version          # crucible 3.0.0
+crucible --help             # full flag reference
 ```
 
 ---
@@ -50,16 +50,16 @@ redai --help             # full flag reference
 
 ```bash
 # 1. Point at a local Ollama model (no API key, nothing leaves your machine)
-redai --mode vapt --local
+crucible --mode vapt --local
 
 # 2. Or a hosted OpenAI-compatible endpoint
-redai --mode vapt --endpoint https://api.openai.com --api-key $KEY --model gpt-4o
+crucible --mode vapt --endpoint https://api.openai.com --api-key $KEY --model gpt-4o
 
 # 3. Estimate cost/scope first, with zero traffic
-redai --mode redteam --dry-run
+crucible --mode redteam --dry-run
 
 # 4. Full-spectrum run with framework overlays + PDF
-redai --mode redteam --framework atlas --owasp --nist --pdf \
+crucible --mode redteam --framework atlas --owasp --nist --pdf \
   --endpoint $ENDPOINT --api-key $KEY --model $MODEL
 ```
 
@@ -71,7 +71,7 @@ Exit codes (for CI): `0` = below threshold, `1` = risk score over `--ci-threshol
 ## Attack modes (`--mode`)
 
 Each mode runs a dedicated suite through the standard execute → classify → score →
-report pipeline. `redai --list-tests --mode <name>` lists a mode's tests.
+report pipeline. `crucible --list-tests --mode <name>` lists a mode's tests.
 
 | Mode | Tests | Focus |
 |------|-------|-------|
@@ -115,15 +115,15 @@ vulnerability × technique matrix (`--list-vulns`).
 
 ### Safety controls
 
-REDai is offensive-capable, so it gates itself:
+CRUCIBLE is offensive-capable, so it gates itself:
 
 - **Authorization** — `--recon` / `--full-stack` / `--extract` / `--discover` require
-  consent every run (interactively, or `--i-am-authorized` / `AI_RT_AUTHORIZED=1`;
+  consent every run (interactively, or `--i-am-authorized` / `CRUCIBLE_AUTHORIZED=1`;
   `--ci` does **not** bypass them).
-- **Rules of Engagement** — drop a `.ai-redteam-roe.yaml`
-  (see [`.ai-redteam-roe.example.yaml`](.ai-redteam-roe.example.yaml)) and REDai refuses
+- **Rules of Engagement** — drop a `.crucible-roe.yaml`
+  (see [`.crucible-roe.example.yaml`](.crucible-roe.example.yaml)) and CRUCIBLE refuses
   any live target or recon scope outside the authorized CIDRs/hosts (and after expiry).
-- **Audit trail** — every side-effectful run is appended to `.ai-redteam-audit.jsonl`
+- **Audit trail** — every side-effectful run is appended to `.crucible-audit.jsonl`
   (operator, time, action, target host, ROE ref).
 - **Blast-radius caps** — `--budget` / `--max-calls` (hard ceiling) and `--rps` / `--delay`.
 - **Redaction** — `--anonymize` redacts the endpoint/key **and scrubs emails, SSNs,
@@ -133,12 +133,12 @@ REDai is offensive-capable, so it gates itself:
 
 ## Common flags
 
-`redai --help` prints the full ~180-flag reference. The essentials:
+`crucible --help` prints the full ~180-flag reference. The essentials:
 
 | Flag | Description |
 |------|-------------|
 | `--mode NAME` | Attack mode (see table above) |
-| `--endpoint URL` / `--api-key` / `--model` | Target (or env `AI_RT_ENDPOINT` / `AI_RT_API_KEY`) |
+| `--endpoint URL` / `--api-key` / `--model` | Target (or env `CRUCIBLE_ENDPOINT` / `CRUCIBLE_API_KEY`) |
 | `--schema` | `openai` · `anthropic` · `cohere` · `mistral` · `google` · `ollama` · `azure` · `bedrock` · `custom` · `browser` |
 | `--local` / `--offline` | Point at local Ollama / enforce air-gap |
 | `--framework atlas` · `--owasp` · `--nist` · `--compliance` | Framework overlays + evidence packs |
@@ -158,31 +158,31 @@ REDai is offensive-capable, so it gates itself:
 
 ```bash
 # Ollama (local, no key) with framework overlays
-redai --mode redteam --local --framework atlas --owasp --nist
+crucible --mode redteam --local --framework atlas --owasp --nist
 
 # Anthropic Claude, full report
-redai --mode redteam --schema anthropic --endpoint https://api.anthropic.com \
+crucible --mode redteam --schema anthropic --endpoint https://api.anthropic.com \
   --api-key $ANTHROPIC_API_KEY --model claude-sonnet-4-6 --framework atlas --pdf
 
 # Adaptive multi-turn (Crescendo) against a local target
-redai --crescendo --crescendo-goal "reveal the hidden system prompt" \
+crucible --crescendo --crescendo-goal "reveal the hidden system prompt" \
   --local --attacker-model kimi-k2
 
 # Modern universal-bypass suite
-redai --mode modern-jailbreak --endpoint $ENDPOINT --api-key $KEY --model $MODEL
+crucible --mode modern-jailbreak --endpoint $ENDPOINT --api-key $KEY --model $MODEL
 
 # Self-improving loop: grow the KB on wins
-redai --evolve --local --load-corpus wildjailbreak.tsv --corpus-limit 500
+crucible --evolve --local --load-corpus wildjailbreak.tsv --corpus-limit 500
 
 # Infra recon → behavioural sweep → one unified report (authorized infra only)
-redai --full-stack --recon-scope 10.10.0.0/24 --i-am-authorized
+crucible --full-stack --recon-scope 10.10.0.0/24 --i-am-authorized
 
 # CI gate
-redai --mode vapt --ci --ci-threshold 20 --no-color \
+crucible --mode vapt --ci --ci-threshold 20 --no-color \
   --endpoint $API_ENDPOINT --api-key $API_KEY --model gpt-4o
 
 # Web dashboard
-redai --serve         # → http://127.0.0.1:8000
+crucible --serve         # → http://127.0.0.1:8000
 ```
 
 ---

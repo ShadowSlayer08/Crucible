@@ -1,4 +1,4 @@
-# Development / test dependencies for the AI Red Team CLI.
+# Development / test dependencies for the CRUCIBLE.
 #   pip install -r requirements.txt -r requirements-dev.txt
 #   pytest
 -r requirements.txt

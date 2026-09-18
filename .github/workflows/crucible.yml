@@ -37,9 +37,9 @@ jobs:
         id: scan
         continue-on-error: true
         env:
-          AI_RT_API_KEY:  ${{ secrets.AI_RT_API_KEY }}
-          AI_RT_ENDPOINT: ${{ secrets.AI_RT_ENDPOINT }}
-          AI_RT_MODEL:    ${{ secrets.AI_RT_MODEL }}
+          CRUCIBLE_API_KEY:  ${{ secrets.CRUCIBLE_API_KEY }}
+          CRUCIBLE_ENDPOINT: ${{ secrets.CRUCIBLE_ENDPOINT }}
+          CRUCIBLE_MODEL:    ${{ secrets.CRUCIBLE_MODEL }}
         run: |
           set -o pipefail
           python main.py \
@@ -49,9 +49,9 @@ jobs:
             --no-color \
             --skip-connection-test \
             --output-dir reports \
-            --api-key  "$AI_RT_API_KEY" \
-            --endpoint "$AI_RT_ENDPOINT" \
-            --model    "$AI_RT_MODEL" \
+            --api-key  "$CRUCIBLE_API_KEY" \
+            --endpoint "$CRUCIBLE_ENDPOINT" \
+            --model    "$CRUCIBLE_MODEL" \
             2>&1 | tee scan-output.txt
           echo "scan_exit=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
@@ -73,7 +73,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: reports/
-          category: ai-redteam
+          category: crucible
 
       # ── Comment on PR with scan summary ────────────────────────────────────
       - name: Comment on PR

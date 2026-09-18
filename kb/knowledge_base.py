@@ -14,7 +14,7 @@ Deliberately dependency-light — **no chromadb, no sentence-transformers**. It 
     offline-lite and unit tests run with no daemon.
 
 Public API:
-    kb = RedTeamKB(persist_dir=".ai-redteam-kb")
+    kb = RedTeamKB(persist_dir=".crucible-kb")
     kb.add(collection, text, metadata=None, doc_id=None) -> doc_id
     kb.add_many(collection, [(text, metadata), ...])      -> [doc_id, ...]
     kb.query(collection, text, n=5)                       -> [{doc_id,text,metadata,score}]
@@ -30,7 +30,7 @@ import os
 import re
 import sqlite3
 
-DEFAULT_DIR = os.environ.get("AI_RT_KB_DIR", ".ai-redteam-kb")
+DEFAULT_DIR = os.environ.get("CRUCIBLE_KB_DIR", ".crucible-kb")
 COLLECTIONS = ("attack_patterns", "run_history", "mitre_atlas", "owasp_llm", "research")
 _WORD = re.compile(r"\w+")
 

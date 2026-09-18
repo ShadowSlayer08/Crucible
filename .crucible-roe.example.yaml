@@ -1,6 +1,6 @@
-# Rules of Engagement (ROE) — scope confinement for REDai.
+# Rules of Engagement (ROE) — scope confinement for CRUCIBLE.
 #
-# Copy to `.ai-redteam-roe.yaml` (git-ignored) to ACTIVATE. When present, REDai
+# Copy to `.crucible-roe.yaml` (git-ignored) to ACTIVATE. When present, CRUCIBLE
 # refuses any live target or recon scope not inside `authorized`, and stamps the
 # reference below into reports and the audit trail. No file = not enforced.
 #

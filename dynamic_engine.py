@@ -1,5 +1,5 @@
 """
-Dynamic Attack Engine — AI Red Team CLI
+Dynamic Attack Engine — CRUCIBLE
 
 AttackerLLM uses a local Ollama model (default: kimi-k2) as an autonomous
 adversarial agent that generates, judges, and mutates attack payloads against

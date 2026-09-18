@@ -24,7 +24,7 @@ from datetime import datetime
 
 import colors as C
 
-CHECKPOINT_FILE = ".ai-redteam-checkpoint.json"
+CHECKPOINT_FILE = ".crucible-checkpoint.json"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

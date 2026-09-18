@@ -93,7 +93,7 @@ def _import_plugin_module(path: str):
     Uses a unique synthetic module name so two plugins with the same filename
     in different directories don't collide in sys.modules.
     """
-    mod_name = "redai_plugin_" + os.path.splitext(os.path.basename(path))[0]
+    mod_name = "crucible_plugin_" + os.path.splitext(os.path.basename(path))[0]
     spec = importlib.util.spec_from_file_location(mod_name, path)
     if spec is None or spec.loader is None:
         raise ImportError(f"could not create import spec for {path}")

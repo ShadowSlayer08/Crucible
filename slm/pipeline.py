@@ -19,8 +19,8 @@ Public API:
     run_pipeline(...) -> {ok, steps, verdict, promoted, version_id, reason}
 
 CLI:
-    python -m slm.pipeline --base qwen2.5:7b --slm redai-slm:latest --target llama3.2:3b
-    python -m slm.pipeline --skip-train --slm redai-slm:latest --target llama3.2:3b
+    python -m slm.pipeline --base qwen2.5:7b --slm crucible-slm:latest --target llama3.2:3b
+    python -m slm.pipeline --skip-train --slm crucible-slm:latest --target llama3.2:3b
 """
 
 import argparse
@@ -62,12 +62,12 @@ def _open_kb(kb_dir):
 
 
 def run_pipeline(base_model: str = "qwen2.5:7b",
-                 slm_model: str = "redai-slm:latest",
+                 slm_model: str = "crucible-slm:latest",
                  target=None,
                  host: str = "http://localhost:11434",
                  samples: int = 3,
                  probes=None,
-                 kb_dir: str = ".ai-redteam-kb",
+                 kb_dir: str = ".crucible-kb",
                  dataset_path: str = None,
                  checkpoint: str = None,
                  out_dir: str = None,
@@ -210,12 +210,12 @@ def main(argv=None):
         description="One-command SLM self-improvement loop: collect → train → export "
                     "→ evaluate → register/promote (gated on the Wilson-CI A/B verdict).")
     ap.add_argument("--base", default="qwen2.5:7b", help="Base attacker model")
-    ap.add_argument("--slm", default="redai-slm:latest", help="Fine-tuned SLM model name")
+    ap.add_argument("--slm", default="crucible-slm:latest", help="Fine-tuned SLM model name")
     ap.add_argument("--target", default="llama3.2:3b",
                     help="Target model(s), comma-separated for a multi-target sweep")
     ap.add_argument("--host", default=os.environ.get("OLLAMA_HOST", "http://localhost:11434"))
     ap.add_argument("--samples", type=int, default=3, help="Samples per payload in eval (default 3)")
-    ap.add_argument("--kb-dir", default=".ai-redteam-kb", help="KB directory to collect wins from")
+    ap.add_argument("--kb-dir", default=".crucible-kb", help="KB directory to collect wins from")
     ap.add_argument("--dataset", default=None, help="Dataset JSONL output path")
     ap.add_argument("--skip-train", action="store_true",
                     help="Skip train+export; A/B an already-built --slm (no GPU needed)")

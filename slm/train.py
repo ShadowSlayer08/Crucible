@@ -593,7 +593,7 @@ def train(dataset_path: str = DEFAULT_DATASET,
     WITHOUT importing torch or crashing — so the scaffold is safe to invoke
     anywhere; the actual training only happens on the operator's GPU box.
     """
-    print(C.BOLD(C.CYAN("REDai · Phase 6C — local red-team SLM LoRA trainer")))
+    print(C.BOLD(C.CYAN("CRUCIBLE · Phase 6C — local red-team SLM LoRA trainer")))
 
     # 1) Data first — this part is pure stdlib and always runs.
     try:

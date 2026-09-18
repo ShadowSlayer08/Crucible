@@ -21,7 +21,7 @@ def _run(*args):
     env.pop("PYTHONUTF8", None)
     env.pop("PYTHONIOENCODING", None)
     # Isolate trend history so smoke tests never touch the project DB.
-    env["AI_RT_HISTORY_DB"] = os.path.join(tempfile.gettempdir(), "redai_smoke_history.db")
+    env["CRUCIBLE_HISTORY_DB"] = os.path.join(tempfile.gettempdir(), "crucible_smoke_history.db")
     return subprocess.run(
         [sys.executable, MAIN, *args, "--no-config"],
         cwd=ROOT, env=env, capture_output=True, text=True, timeout=120,

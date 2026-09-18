@@ -1,7 +1,7 @@
 """
 Modern Universal Jailbreak Payloads  (2024–2025 meta)
 
-REDai's jailbreak layer historically stopped at the 2023 DAN / Grandma /
+CRUCIBLE's jailbreak layer historically stopped at the 2023 DAN / Grandma /
 Developer-Mode era. This suite adds the three canonical universal / lightweight
 cross-model bypass families documented in 2024–2025 research:
 

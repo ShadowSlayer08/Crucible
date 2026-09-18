@@ -12,7 +12,7 @@ import roe as roe_mod
 ROE = {
     "authorized": ["10.10.0.0/16", "192.168.1.50",
                    "staging.example.com", "https://redteam.example.com"],
-    "expiry": "2999-12-31", "ticket": "SEC-1", "_path": ".ai-redteam-roe.yaml",
+    "expiry": "2999-12-31", "ticket": "SEC-1", "_path": ".crucible-roe.yaml",
 }
 
 

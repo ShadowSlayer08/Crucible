@@ -10,12 +10,12 @@ import slm.merge as m
 
 # ── MoE config ───────────────────────────────────────────────────────────────
 def test_build_moe_config_from_names_adds_routing():
-    cfg = m.build_moe_config(["redai-slm-inject", "redai-slm-jailbreak"], "phi3")
+    cfg = m.build_moe_config(["crucible-slm-inject", "crucible-slm-jailbreak"], "phi3")
     assert cfg["base_model"] == "phi3" and cfg["gate_mode"] == "hidden"
     assert len(cfg["experts"]) == 2
     # family keyword → routing prompts
     inject = cfg["experts"][0]
-    assert inject["source_model"] == "redai-slm-inject"
+    assert inject["source_model"] == "crucible-slm-inject"
     assert any("instruction" in p for p in inject["positive_prompts"])
 
 
@@ -81,7 +81,7 @@ def test_run_merge_guarded_without_mergekit(tmp_path):
 
 
 def test_merge_experts_dry_run_writes_config(tmp_path):
-    r = m.merge_experts(["redai-slm-inject", "redai-slm-jb"], "phi3",
+    r = m.merge_experts(["crucible-slm-inject", "crucible-slm-jb"], "phi3",
                         out_dir=str(tmp_path / "merged"), method="moe", dry_run=True)
     assert r["ok"] is True and r["method"] == "moe"
     assert json.loads(open(r["config_path"], encoding="utf-8").read())["gate_mode"] == "hidden"

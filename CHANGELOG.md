@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to REDai (AI Red Team CLI). Format follows
+All notable changes to CRUCIBLE (CRUCIBLE). Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses date-stamped
 milestones rather than published releases (source-available, not on PyPI).
 
@@ -43,10 +43,10 @@ The v3 line turns the CLI into a full black-box AI red-team platform. See
 - Frameworks: MITRE ATLAS, OWASP LLM Top 10 + Agentic, NIST AI RMF, SOC2/ISO42001/EU AI Act.
 
 ### Added — safety, robustness, packaging (hardening pass)
-- **Authorization gate** on all offensive paths (`--i-am-authorized` / `AI_RT_AUTHORIZED`;
+- **Authorization gate** on all offensive paths (`--i-am-authorized` / `CRUCIBLE_AUTHORIZED`;
   `--ci` does not bypass).
-- **Rules of Engagement** scope confinement (`.ai-redteam-roe.yaml`, `--roe`).
-- **Append-only audit trail** (`.ai-redteam-audit.jsonl`).
+- **Rules of Engagement** scope confinement (`.crucible-roe.yaml`, `--roe`).
+- **Append-only audit trail** (`.crucible-audit.jsonl`).
 - **PII/secret scrubbing** of saved response bodies under `--anonymize`; AgentHound raw
   blob redaction.
 - Client-side rate limiting (`--rps` / `--delay`) and configurable `--timeout`.
@@ -61,5 +61,5 @@ The v3 line turns the CLI into a full black-box AI red-team platform. See
   `task_completed` / ASR fields (previously silently dropped).
 - `--extra-header` and `--schema custom` overrides now apply on `--compare` / `--auto`.
 - `--offline` host check parses the URL host (no more `localhost.evil.com` bypass).
-- Single-sourced version (`--version` → `redai 3.0.0`); console script `redai`.
+- Single-sourced version (`--version` → `crucible 3.0.0`); console script `crucible`.
 - `SILENT` / `PARTIAL_REFUSAL` verdicts now render coloured everywhere.

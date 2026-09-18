@@ -1,11 +1,11 @@
-# AI Red Team CLI — Config File (EXAMPLE)
-# Copy to .ai-redteam.yaml and fill in your own values.
-# The real .ai-redteam.yaml is git-ignored — never commit credentials.
+# CRUCIBLE — Config File (EXAMPLE)
+# Copy to .crucible.yaml and fill in your own values.
+# The real .crucible.yaml is git-ignored — never commit credentials.
 #
 # All values here are defaults; CLI flags always override them.
 
 # ── Target ──────────────────────────────────────────────────────
-# Prefer the AI_RT_API_KEY / AI_RT_ENDPOINT env vars over storing a key here.
+# Prefer the CRUCIBLE_API_KEY / CRUCIBLE_ENDPOINT env vars over storing a key here.
 # api_key: sk-xxx
 endpoint: http://localhost:11434        # e.g. Ollama local, or a provider URL
 model: llama-3.3-70b

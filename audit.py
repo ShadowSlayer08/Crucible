@@ -7,7 +7,7 @@ compliance evidence (SOC2 / ISO 42001, which compliance.py already targets). Thi
 deliberately separate from the trend DB (which hashes the endpoint and holds no
 operator identity) and from the redactable reports.
 
-Writes newline-delimited JSON to .ai-redteam-audit.jsonl (path via $AI_RT_AUDIT).
+Writes newline-delimited JSON to .crucible-audit.jsonl (path via $CRUCIBLE_AUDIT).
 Records the endpoint HOST only (never the full URL, api key, or any credential).
 Never raises: a failed write degrades to a no-op, it never blocks a run.
 
@@ -20,11 +20,11 @@ import json
 import os
 from urllib.parse import urlparse
 
-DEFAULT_AUDIT_FILE = os.environ.get("AI_RT_AUDIT", ".ai-redteam-audit.jsonl")
+DEFAULT_AUDIT_FILE = os.environ.get("CRUCIBLE_AUDIT", ".crucible-audit.jsonl")
 
 
 def _operator() -> str:
-    for k in ("AI_RT_OPERATOR", "USER", "USERNAME"):
+    for k in ("CRUCIBLE_OPERATOR", "USER", "USERNAME"):
         v = os.environ.get(k)
         if v:
             return v

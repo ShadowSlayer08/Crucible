@@ -1,5 +1,5 @@
 """
-Example plugin for the AI Red Team CLI plugin architecture.
+Example plugin for the CRUCIBLE plugin architecture.
 
 Drop a *.py file in this directory exporting a module-level ``TESTS`` list of
 test dicts. Each dict must follow the standard schema:

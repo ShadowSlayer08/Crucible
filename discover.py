@@ -1,5 +1,5 @@
 """
-Target Discovery Module — AI Red Team CLI
+Target Discovery Module — CRUCIBLE
 
 Sends 5 sequential reconnaissance probes to fingerprint an AI target:
   1. Identity / creator
@@ -191,7 +191,7 @@ def save_discovery_json(config: dict, probe_results: list[dict],
     doc = {
         "metadata": {
             "timestamp":        datetime.now().isoformat(),
-            "tool":             "AI Red Team CLI — Discovery Mode",
+            "tool":             "CRUCIBLE — Discovery Mode",
             "endpoint":         config.get("endpoint", ""),
             "model":            config.get("model", ""),
             "schema_used":      config.get("schema", ""),

@@ -1,5 +1,5 @@
 """
-FastAPI REST Wrapper — API-first surface for the AI Red Team CLI.
+FastAPI REST Wrapper — API-first surface for the CRUCIBLE.
 
 Exposes the engine, classifier, and payload suites over HTTP so the CLI's
 capabilities can be driven from a dashboard, a CI job, or another service.
@@ -227,7 +227,7 @@ def _run_live_scan(mode: str, tests: list, config: dict) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="AI Red Team CLI — REST API",
+        title="CRUCIBLE — AI Red Team REST API",
         version=API_VERSION,
         description="API-first wrapper over the engine, classifier, and payload suites.",
     )
@@ -365,7 +365,7 @@ def create_app() -> FastAPI:
                 return HTMLResponse(f.read())
         except OSError:
             return HTMLResponse(
-                "<h1>AI Red Team CLI API</h1>"
+                "<h1>CRUCIBLE API</h1>"
                 "<p>Dashboard not found. See <a href='/docs'>/docs</a>.</p>"
             )
 

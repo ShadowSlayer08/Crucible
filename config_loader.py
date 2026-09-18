@@ -1,14 +1,14 @@
 """
 Config File Loader
-Reads .ai-redteam.yaml (or --config path) and merges defaults with CLI args.
+Reads .crucible.yaml (or --config path) and merges defaults with CLI args.
 CLI args always win over config file values.
 
 Default search order:
   1. --config <path>          (explicit)
-  2. ./.ai-redteam.yaml       (current directory)
-  3. ~/.ai-redteam.yaml       (home directory)
+  2. ./.crucible.yaml       (current directory)
+  3. ~/.crucible.yaml       (home directory)
 
-Example .ai-redteam.yaml:
+Example .crucible.yaml:
 ─────────────────────────
 schema: anthropic
 model: claude-sonnet-4-6
@@ -25,7 +25,7 @@ ci_threshold: 30
 
 import os
 
-CONFIG_FILENAMES = [".ai-redteam.yaml", ".ai-redteam.yml"]
+CONFIG_FILENAMES = [".crucible.yaml", ".crucible.yml"]
 
 # Fields that can be set in config and their expected types
 CONFIG_SCHEMA = {
@@ -185,13 +185,13 @@ def print_config_summary(path: str, config: dict):
 def generate_config_template(path: str):
     """Write a starter config file to disk."""
     template = """\
-# AI Red Team CLI — Config File
-# Place as .ai-redteam.yaml in your project dir or ~/.ai-redteam.yaml
+# CRUCIBLE — Config File
+# Place as .crucible.yaml in your project dir or ~/.crucible.yaml
 #
 # All values here are defaults — CLI flags always override them.
 
 # ── Target ──────────────────────────────────────────────────────
-# api_key: sk-xxx           # or set AI_RT_API_KEY env var
+# api_key: sk-xxx           # or set CRUCIBLE_API_KEY env var
 # endpoint: https://api.openai.com
 model: gpt-4o
 schema: openai              # openai | anthropic | google | mistral | cohere | ollama | azure | bedrock | custom

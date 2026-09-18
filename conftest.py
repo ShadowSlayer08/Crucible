@@ -1,4 +1,4 @@
-"""Pytest bootstrap for the AI Red Team CLI test suite.
+"""Pytest bootstrap for the CRUCIBLE test suite.
 
 Ensures the project root is importable (so `import classifier`, `import engine`,
 etc. resolve from tests/) and exposes a few shared fixtures.

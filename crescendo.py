@@ -1,7 +1,7 @@
 """
 crescendo.py — adaptive multi-turn red-team (Crescendo / Chain-of-Attack).
 
-REDai's multi-turn story (`multiturn.py`) runs FIXED scripted conversations — it can
+CRUCIBLE's multi-turn story (`multiturn.py`) runs FIXED scripted conversations — it can
 never exploit a partial admission to steer the next turn. Crescendo (Microsoft, 2024)
 is the current-SOTA multi-turn attack: an attacker LLM maintains a growing
 conversation and derives each next turn from the target's OWN prior replies,

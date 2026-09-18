@@ -1,7 +1,7 @@
 """
 modelscan.py — Model-artifact supply-chain scanner (static, no-execution).
 
-The rest of REDai red-teams a model's *behaviour* at runtime. This module covers
+The rest of CRUCIBLE red-teams a model's *behaviour* at runtime. This module covers
 the layer nothing else touches: the model *artifact* itself — the weight file you
 download from a hub and load with one line of code. Pickle-based formats
 (``.pkl``, ``.pt``/``.pth``, ``.ckpt``, ``.bin``) run arbitrary Python on load via

@@ -4,7 +4,7 @@ fullstack.py — orchestrate the infra → behaviour full-stack merge.
 `--full-stack` previously only PRINTED a sweep plan. This module makes the merge
 real:
 
-  • sweep_targets()        — actually fire REDai's behavioural red-team at each
+  • sweep_targets()        — actually fire CRUCIBLE's behavioural red-team at each
                              AgentHound-discovered endpoint (subprocess self-invocation;
                              the invoker is injectable so it is unit-testable).
   • build_unified_report() — merge infra findings/endpoints/paths + the behavioural

@@ -1,17 +1,17 @@
 """
 Saved Target Profiles  —  a target book so you don't retype endpoint/model/schema.
 
-    redai --save-target prod-claude --schema anthropic \
+    crucible --save-target prod-claude --schema anthropic \
           --endpoint https://api.anthropic.com --model claude-sonnet-4-6
-    redai --target prod-claude --mode redteam        # reuse it
-    redai --list-targets
+    crucible --target prod-claude --mode redteam        # reuse it
+    crucible --list-targets
 
-Stored in .ai-redteam-targets.yaml (git-ignored). For security, API KEYS ARE NOT
-SAVED — supply the key at run time via --api-key or the AI_RT_API_KEY env var.
+Stored in .crucible-targets.yaml (git-ignored). For security, API KEYS ARE NOT
+SAVED — supply the key at run time via --api-key or the CRUCIBLE_API_KEY env var.
 """
 import os
 
-TARGETS_FILE = os.environ.get("AI_RT_TARGETS", ".ai-redteam-targets.yaml")
+TARGETS_FILE = os.environ.get("CRUCIBLE_TARGETS", ".crucible-targets.yaml")
 _FIELDS = ("endpoint", "model", "schema")
 
 
@@ -54,7 +54,7 @@ def save_target(name: str, endpoint: str, model: str, schema: str,
                        if k not in ("endpoint", "model", "schema") and v not in (None, "")})
     data[name] = record
     with open(path, "w", encoding="utf-8") as f:
-        f.write("# REDai saved targets — DO NOT store API keys here (git-ignored).\n")
+        f.write("# CRUCIBLE saved targets — DO NOT store API keys here (git-ignored).\n")
         yaml.safe_dump(data, f, sort_keys=True, allow_unicode=True)
     return path
 

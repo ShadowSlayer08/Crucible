@@ -1,6 +1,6 @@
 # SLM Pipeline — a self-improving local red-team model (Phase 6C)
 
-REDai discovers attacks, keeps the winners in a knowledge base (Phase 6B), and
+CRUCIBLE discovers attacks, keeps the winners in a knowledge base (Phase 6B), and
 this pipeline turns those winners into a **fine-tuned local attacker model** that
 makes the *next* run stronger. The loop:
 
@@ -46,11 +46,11 @@ python -m slm.train --dataset slm/training_data/dataset.jsonl --base-model micro
 python -m slm.train --check-env                         # verify torch/CUDA first
 
 # 3. deploy to Ollama
-python -m slm.export --checkpoint slm/checkpoints/latest --model-name redai-slm
-#   → ollama run redai-slm
+python -m slm.export --checkpoint slm/checkpoints/latest --model-name crucible-slm
+#   → ollama run crucible-slm
 
 # 4. PROVE it's better before trusting it (no GPU needed)
-python -m slm.evaluate --base microsoft/Phi-3-mini-4k-instruct --slm redai-slm --target qwen2.5:7b
+python -m slm.evaluate --base microsoft/Phi-3-mini-4k-instruct --slm crucible-slm --target qwen2.5:7b
 #   → Δ ASR and a SHIP / KEEP / INCONCLUSIVE recommendation
 
 # 5. record + promote the version
@@ -73,7 +73,7 @@ KB winners), `merge.py` builds the mergekit config to fuse them:
 
 ```bash
 # MoE: keep each expert whole, route by prompt (a true mixture-of-experts)
-python -m slm.merge --experts redai-slm-inject,redai-slm-jailbreak,redai-slm-rag \
+python -m slm.merge --experts crucible-slm-inject,crucible-slm-jailbreak,crucible-slm-rag \
     --base-model microsoft/Phi-3-mini-4k-instruct --method moe --dry-run   # preview the plan+config
 python -m slm.merge --experts ... --method moe                             # run (needs mergekit + GPU)
 

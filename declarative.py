@@ -1,7 +1,7 @@
 """
 Declarative Vulnerability × Attack composition  —  roadmap G6
 
-A DeepTeam-style API layered over REDai's existing suites and mutators. Instead of
+A DeepTeam-style API layered over CRUCIBLE's existing suites and mutators. Instead of
 picking one fixed `--mode`, the user names WHAT to test (vulnerabilities) and HOW
 to attack it (attack techniques):
 

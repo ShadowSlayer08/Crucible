@@ -332,7 +332,7 @@ def run_extraction(config, output_dir="./reports", skip_connection_test=False,
     report = {
         "metadata": {
             "timestamp": datetime.now().isoformat(),
-            "tool": "AI Red Team CLI — Model-Stealing Engine",
+            "tool": "CRUCIBLE — Model-Stealing Engine",
             "endpoint": config.get("endpoint", ""), "model": config.get("model", ""),
             "schema": config.get("schema", ""),
         },

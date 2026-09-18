@@ -32,10 +32,10 @@ def _args(**kw):
 
 def _run(*args, stdin=""):
     env = dict(os.environ)
-    env.pop("AI_RT_AUTHORIZED", None)
+    env.pop("CRUCIBLE_AUTHORIZED", None)
     env.pop("PYTHONUTF8", None)
     env.pop("PYTHONIOENCODING", None)
-    env["AI_RT_HISTORY_DB"] = os.path.join(tempfile.gettempdir(), "redai_safety_hist.db")
+    env["CRUCIBLE_HISTORY_DB"] = os.path.join(tempfile.gettempdir(), "crucible_safety_hist.db")
     return subprocess.run(
         [sys.executable, MAIN, *args, "--no-config"],
         cwd=ROOT, env=env, input=stdin, capture_output=True, text=True,
@@ -53,27 +53,27 @@ def _latest_json(out_dir, prefix="recon_"):
 
 # ── A1: require_authorization ────────────────────────────────────────────────
 def test_auth_flag_opt_in_skips_prompt(monkeypatch):
-    monkeypatch.delenv("AI_RT_AUTHORIZED", raising=False)
+    monkeypatch.delenv("CRUCIBLE_AUTHORIZED", raising=False)
     monkeypatch.setattr(main, "prompt_authorization",
                         lambda: pytest.fail("flag should short-circuit the prompt"))
     assert main.require_authorization(_args(i_am_authorized=True), "x") is True
 
 
 def test_auth_env_opt_in_skips_prompt(monkeypatch):
-    monkeypatch.setenv("AI_RT_AUTHORIZED", "1")
+    monkeypatch.setenv("CRUCIBLE_AUTHORIZED", "1")
     monkeypatch.setattr(main, "prompt_authorization",
                         lambda: pytest.fail("env should short-circuit the prompt"))
     assert main.require_authorization(_args(i_am_authorized=False), "x") is True
 
 
 def test_auth_prompt_yes(monkeypatch):
-    monkeypatch.delenv("AI_RT_AUTHORIZED", raising=False)
+    monkeypatch.delenv("CRUCIBLE_AUTHORIZED", raising=False)
     monkeypatch.setattr(main, "prompt_authorization", lambda: True)
     assert main.require_authorization(_args(i_am_authorized=False), "x") is True
 
 
 def test_auth_prompt_no_fails_closed(monkeypatch):
-    monkeypatch.delenv("AI_RT_AUTHORIZED", raising=False)
+    monkeypatch.delenv("CRUCIBLE_AUTHORIZED", raising=False)
     monkeypatch.setattr(main, "prompt_authorization", lambda: False)
     assert main.require_authorization(_args(i_am_authorized=False), "x") is False
 

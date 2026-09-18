@@ -22,7 +22,7 @@ import json
 import os
 import re
 
-TRAIN_DIR = os.environ.get("AI_RT_SLM_DIR", os.path.join("slm", "training_data"))
+TRAIN_DIR = os.environ.get("CRUCIBLE_SLM_DIR", os.path.join("slm", "training_data"))
 _WORD = re.compile(r"\w+")
 
 

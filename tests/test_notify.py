@@ -9,9 +9,9 @@ def test_build_email_is_plaintext():
 
 
 def test_smtp_config_reads_env(monkeypatch):
-    monkeypatch.setenv("AI_RT_SMTP_HOST", "smtp.example.com")
-    monkeypatch.setenv("AI_RT_SMTP_PORT", "2525")
-    monkeypatch.setenv("AI_RT_SMTP_USER", "u@x.com")
+    monkeypatch.setenv("CRUCIBLE_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("CRUCIBLE_SMTP_PORT", "2525")
+    monkeypatch.setenv("CRUCIBLE_SMTP_USER", "u@x.com")
     cfg = notify.smtp_config()
     assert cfg["host"] == "smtp.example.com" and cfg["port"] == 2525
     assert cfg["from"] == "u@x.com" and cfg["starttls"] is True
@@ -23,7 +23,7 @@ def test_send_email_no_recipient():
 
 
 def test_send_email_not_configured(monkeypatch):
-    monkeypatch.delenv("AI_RT_SMTP_HOST", raising=False)
+    monkeypatch.delenv("CRUCIBLE_SMTP_HOST", raising=False)
     ok, why = notify.send_email("to@x.com", "s", "b", config={"host": None})
     assert ok is False and "SMTP not configured" in why
 
