@@ -74,6 +74,20 @@ def test_apply_custom_overrides_only_for_custom_schema():
 
 
 # ── G-c: verdict colours now cover SILENT / PARTIAL_REFUSAL ──────────────────
+def test_version_is_single_sourced():
+    # main.__version__ must match the pyproject version (no more 4-way drift).
+    import os
+    import re
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    pyproject = open(os.path.join(root, "pyproject.toml"), encoding="utf-8").read()
+    m = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.M)
+    assert m and m.group(1) == main.__version__
+    # the banner + parser both use it
+    assert main.__version__ in main.banner()
+    parser = main.build_parser()
+    assert any(getattr(a, "dest", "") == "version" for a in parser._actions)
+
+
 def test_verdict_color_covers_silent_and_partial(monkeypatch):
     # init() force-disables colour on a non-TTY (pytest), so flip the flag directly.
     monkeypatch.setattr(C, "_COLOR_ENABLED", True)
