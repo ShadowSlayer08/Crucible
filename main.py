@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════╗
-║           AI RED TEAM CLI (REDai) — v3.0.0               ║
+║        CRUCIBLE — Trial by fire for AI · v3.0.0          ║
 ║  VAPT | Red Team | ATLAS | OWASP | Discovery | MultiTurn ║
 ╚══════════════════════════════════════════════════════════╝
 
@@ -134,7 +134,7 @@ __version__ = "3.0.0"
 def banner():
     return f"""
 {C.CYAN('╔══════════════════════════════════════════════════════════╗')}
-{C.CYAN('║')}  {C.BOLD('AI RED TEAM CLI')}  ·  v{__version__}                               {C.CYAN('║')}
+{C.CYAN('║')}  {C.BOLD(C.RED('◈ CRUCIBLE'))}  ·  v{__version__}  {C.DIM('— Trial by fire for AI.')}        {C.CYAN('║')}
 {C.CYAN('║')}  VAPT | RedTeam | ATLAS | OWASP | MCP | Agentic | RAG  {C.CYAN('║')}
 {C.CYAN('╚══════════════════════════════════════════════════════════╝')}
 
@@ -474,13 +474,13 @@ def print_verbose(test, api_result, classification):
 
 def build_parser():
     p = argparse.ArgumentParser(
-        prog="redai",
-        description=f"AI Red Team CLI (REDai) v{__version__}",
+        prog="crucible",
+        description=f"CRUCIBLE — AI Red Team CLI · Trial by fire for AI · v{__version__}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    p.add_argument("--version", action="version", version=f"redai {__version__}",
-                   help="Print the REDai version and exit")
+    p.add_argument("--version", action="version", version=f"crucible {__version__}",
+                   help="Print the CRUCIBLE version and exit")
 
     # mode + target
     p.add_argument("--mode", choices=[
@@ -2456,6 +2456,15 @@ def run(args):
 
         sys.exit(1 if result.get("success") else 0)
 
+    return run_main_pipeline(args)
+
+
+def run_main_pipeline(args):
+    """Main behavioural-scan pipeline: build the test pool, fire it at the target,
+    classify, score, report, run the post-run passes (dynamic/tap/adaptive/mutate)
+    and the CI / watch / transfer stages. Returns the process exit code (0 on the
+    normal path). Lifted verbatim out of run() by the dispatch-registry refactor;
+    sys.exit(n) became return n."""
     if not args.mode and not args.resume \
             and not getattr(args, "compare", False) \
             and not getattr(args, "retry_failed", False) \
@@ -2464,7 +2473,7 @@ def run(args):
               f"Choose: vapt | redteam | payload | mcp | agentic | rag | "
               f"swarm | policy | benign | obfuscation  "
               f"(or use --vuln/--attack, --discover, --multi-turn)\n")
-        sys.exit(1)
+        return 1
 
     mode             = args.mode or ("declarative" if getattr(args, "vuln", None) else "redteam")
 
@@ -2497,7 +2506,7 @@ def run(args):
     # ── PAYLOAD MODE ──────────────────────────────────────────────────────────
     if mode == "payload":
         show_payload_mode(schema, args.show_payloads, args.export, severities)
-        sys.exit(0)
+        return 0
 
     # ── Build base test pool ──────────────────────────────────────────────────
     if getattr(args, "vuln", None):
@@ -2508,7 +2517,7 @@ def run(args):
             base_tests = declarative.compose(_vulns, _attacks)
         except ValueError as e:
             print(f"  {C.RED('Error')}: {e}\n")
-            sys.exit(1)
+            return 1
         print(f"  {C.CYAN('◈ DECLARATIVE')}  vuln=[{','.join(_vulns)}] "
               f"attack=[{','.join(_attacks) or 'none'}] → {len(base_tests)} composed test(s)")
     elif mode == "policy" and getattr(args, "generate_policy", False):
@@ -2522,13 +2531,13 @@ def run(args):
         ok, msg = _gen_atk.is_model_available()
         if not ok:
             print(f"  {C.RED('✗')} Generator LLM unavailable: {msg}\n")
-            sys.exit(1)
+            return 1
         print(f"  {C.CYAN('◈ POLICY-GEN')}  {gen_model} generating {args.gen_n}/category "
               f"for {len(cats)} categor(ies)... {C.DIM('(this calls the local model)')}")
         base_tests = policy_gen.generate_suite(cats, args.gen_n, lambda pr: _gen_atk.call(pr))
         print(f"  {C.GREEN('✓')} Generated {len(base_tests)} policy attack(s)")
         if not base_tests:
-            print(f"  {C.RED('No attacks generated.')}\n"); sys.exit(1)
+            print(f"  {C.RED('No attacks generated.')}\n"); return 1
     elif mode in EXPANDED_MODE_TESTS:
         # v3.0 dedicated attack-surface suites (mcp/agentic/rag/swarm/policy/benign/...)
         base_tests = list(EXPANDED_MODE_TESTS[mode])
@@ -2645,11 +2654,11 @@ def run(args):
         tests = search_tests(tests, args.search)
         if args.list_tests or not (args.api_key or os.environ.get("AI_RT_API_KEY")):
             print_search_results(tests, args.search)
-            sys.exit(0)
+            return 0
         else:
             print_search_results(tests, args.search)
             if not tests:
-                sys.exit(0)
+                return 0
 
     # ── --tags filter ─────────────────────────────────────────────────────────
     tag_match_count = None
@@ -2660,7 +2669,7 @@ def run(args):
 
     if not tests:
         print(f"  {C.RED('No tests match filters.')}\n")
-        sys.exit(1)
+        return 1
 
     # ── --sort-by-tier: run highest-effectiveness (Tier A) payloads first ─────
     if getattr(args, "sort_by_tier", False):
@@ -2678,15 +2687,15 @@ def run(args):
         if payload_audit.is_all_stale(_audit) and not getattr(args, "force_stale", False):
             print(f"  {C.RED('All selected payloads are D-tier (stale).')} "
                   f"Re-run with --force-stale to proceed anyway.\n")
-            sys.exit(1)
+            return 1
 
     if args.show_payloads:
         print_full_payloads(tests, mode)
-        sys.exit(0)
+        return 0
 
     if args.list_tests:
         list_tests(mode, tests)
-        sys.exit(0)
+        return 0
 
     # ── COMPARE MODE: dispatch before single-endpoint flow ────────────────────
     if getattr(args, "compare", False):
@@ -2724,12 +2733,12 @@ def run(args):
     api_key = args.api_key or os.environ.get("AI_RT_API_KEY")
     if args.ci and not api_key:
         print("CI mode requires AI_RT_API_KEY env var or --api-key")
-        sys.exit(1)
+        return 1
     if not api_key and schema not in ("ollama", "browser"):
         api_key = _read_line("  Enter API key: ", secret=True)
     if not api_key and schema not in ("ollama", "browser"):
         print(f"  {C.RED('API key required.')}\n")
-        sys.exit(1)
+        return 1
 
     # Browser mode targets a UI via --browser-url, not a REST endpoint.
     if schema == "browser":
@@ -2779,12 +2788,12 @@ def run(args):
             print(f"  {C.RED('Browser mode needs:')} "
                   f"--browser-url / --browser-input-selector / --browser-response-selector\n")
             print(engine_browser.browser_schema_help())
-            sys.exit(1)
+            return 1
         adapter = engine_browser.BrowserAdapter(b_cfg)
         if not adapter.available():
             print(f"  {C.RED('Playwright not installed.')} "
                   f"Run: pip install playwright && python -m playwright install chromium\n")
-            sys.exit(1)
+            return 1
         config["_browser_adapter"] = adapter
 
     samples_n = max(1, getattr(args, "samples", 1))
@@ -2800,13 +2809,13 @@ def run(args):
     if not ci_mode and not args.dry_run:
         if not prompt_authorization():
             print(f"\n  {C.RED('Aborted.')}\n")
-            sys.exit(0)
+            return 0
 
     # ── ROE scope confinement + audit for the main behavioural sweep ──────────
     # (dry-run makes no calls; skip. The engine guard is a backstop for every call.)
     if not args.dry_run and config.get("endpoint"):
         if not enforce_roe_and_audit(args, config["endpoint"], "scan", mode=mode):
-            sys.exit(4)
+            return 4
 
     if args.dry_run:
         n = len(tests)
@@ -2826,7 +2835,7 @@ def run(args):
               f"  (${inp_tok/1000*0.003:.4f} in + ${out_tok/1000*0.015:.4f} out)")
         print()
         list_tests(mode, tests)
-        sys.exit(0)
+        return 0
 
     # Browser mode drives a UI (no HTTP endpoint to ping), so skip the REST probe.
     if not args.skip_connection_test and schema != "browser":
@@ -2836,7 +2845,7 @@ def run(args):
             print(f"  {C.GREEN('✓')} {msg}\n")
         else:
             print(f"  {C.RED('✗')} {msg}\n")
-            sys.exit(1 if ci_mode else 0)
+            return 1 if ci_mode else 0
 
     # ── RESUME: load checkpoint ───────────────────────────────────────────────
     prior_results = []
@@ -2852,7 +2861,7 @@ def run(args):
                   f"{C.CYAN(str(len(tests)))} remaining\n")
             if not tests:
                 print(f"  {C.GREEN('All tests already completed.')} Nothing to resume.\n")
-                sys.exit(0)
+                return 0
 
     all_test_ids = [t["id"] for t in (base_tests + custom_tests)]
 
@@ -3404,16 +3413,16 @@ def run(args):
             print(f"\n  {C.YELLOW(C.BOLD('CI WARN'))}  warns={warn_count} > "
                   f"warn-threshold={ci_warn_threshold}")
             print(f"  {C.DIM('Exiting with code 2')}\n")
-            sys.exit(2)
+            return 2
 
         if score > ci_threshold:
             print(f"\n  {C.RED(C.BOLD('CI FAILED'))}  score={score} > threshold={ci_threshold}  [{level}]")
             print(f"  {C.DIM('Exiting with code 1')}\n")
-            sys.exit(1)
+            return 1
         else:
             print(f"\n  {C.GREEN(C.BOLD('CI PASSED'))}  score={score} ≤ threshold={ci_threshold}  [{level}]")
             print(f"  {C.DIM('Exiting with code 0')}\n")
-            sys.exit(0)
+            return 0
 
     # ── --watch: re-run Critical+High on an interval ─────────────────────────
     watch_interval = getattr(args, "watch", 0)
@@ -3490,6 +3499,8 @@ def run(args):
                               f"{C.GREEN('sent → ' + alert_email) if ok else C.YELLOW('not sent — ' + why)}")
                 prev_score = new_score
 
+    return 0
+
 
 def _force_utf8_streams():
     """Make stdout/stderr UTF-8 so banner box-drawing, ◈, ε, ✓/✗ etc. don't
@@ -3509,7 +3520,7 @@ def main():
     _force_utf8_streams()
     parser = build_parser()
     args   = parser.parse_args()
-    run(args)
+    sys.exit(run(args))
 
 
 if __name__ == "__main__":
