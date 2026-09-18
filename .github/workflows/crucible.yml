@@ -1,4 +1,4 @@
-name: AI Red Team
+name: CRUCIBLE Scan
 
 on:
   push:
@@ -13,8 +13,30 @@ permissions:
   pull-requests: write     # required to post PR comment
 
 jobs:
+  # A live scan needs a target. On forks and secretless public pushes there is no
+  # endpoint configured, so gate the scan on the secret's presence — the job is
+  # SKIPPED (green), not failed, when CRUCIBLE_ENDPOINT isn't set.
+  guard:
+    name: Scan target configured?
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          EP: ${{ secrets.CRUCIBLE_ENDPOINT }}
+        run: |
+          if [ -n "$EP" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No CRUCIBLE_ENDPOINT secret configured — skipping the live scan (expected on forks / public pushes). Set repo secrets CRUCIBLE_ENDPOINT / CRUCIBLE_API_KEY / CRUCIBLE_MODEL to enable it."
+          fi
+
   redteam:
     name: AI Safety Scan
+    needs: guard
+    if: needs.guard.outputs.configured == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -27,13 +49,13 @@ jobs:
           python-version: '3.11'
           cache: pip
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install CRUCIBLE
+        run: pip install -e ".[pdf]"
 
       # ── Run the scan ────────────────────────────────────────────────────────
       # continue-on-error so the SARIF upload and PR comment steps always run.
       # We re-raise the failure explicitly at the end.
-      - name: Run AI red team scan
+      - name: Run CRUCIBLE scan
         id: scan
         continue-on-error: true
         env:
@@ -42,11 +64,12 @@ jobs:
           CRUCIBLE_MODEL:    ${{ secrets.CRUCIBLE_MODEL }}
         run: |
           set -o pipefail
-          python main.py \
+          crucible \
             --mode vapt \
             --ci \
             --ci-threshold 20 \
             --no-color \
+            --i-am-authorized \
             --skip-connection-test \
             --output-dir reports \
             --api-key  "$CRUCIBLE_API_KEY" \
@@ -91,7 +114,7 @@ jobs:
               : 'FAILED — risk score exceeds CI threshold (20)';
 
             const body = [
-              `## ${badge} AI Red Team Scan`,
+              `## ${badge} CRUCIBLE Scan`,
               '',
               '| Metric | Value |',
               '|--------|-------|',
@@ -115,5 +138,5 @@ jobs:
       - name: Enforce CI gate
         if: steps.scan.outputs.scan_exit != '0'
         run: |
-          echo "AI red team scan failed (exit ${{ steps.scan.outputs.scan_exit }})."
+          echo "CRUCIBLE scan failed (exit ${{ steps.scan.outputs.scan_exit }})."
           exit 1

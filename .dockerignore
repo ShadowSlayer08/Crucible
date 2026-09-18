@@ -1,0 +1,21 @@
+# Keep the build context lean and secret-free.
+.git
+.github
+reports/
+frontend/node_modules
+frontend/dist
+**/__pycache__
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+docs/build
+graphify-out
+*.bundle
+# local state / secrets (never bake into an image)
+.crucible.yaml
+.crucible-*.yaml
+.crucible-*.db
+.crucible-*.jsonl
+.crucible-kb/
+.env
