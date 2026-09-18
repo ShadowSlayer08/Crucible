@@ -1,9 +1,9 @@
 {
-  "name": "redai-frontend",
+  "name": "crucible-frontend",
   "private": true,
   "version": "3.0.0",
   "type": "module",
-  "description": "React + Vite dashboard for the AI Red Team CLI (talks to server.py).",
+  "description": "React + Vite dashboard for the CRUCIBLE (talks to server.py).",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

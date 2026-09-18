@@ -9,8 +9,8 @@ flowchart LR
     subgraph Platform["Red Teaming Platform — CLI v2.4  (Single-Tenant, Local)"]
 
         subgraph Config["Configuration Layer"]
-            YAML["YAML Config\n(.ai-redteam.yaml)"]
-            ENV["Env Vars\n(AI_RT_API_KEY etc.)"]
+            YAML["YAML Config\n(.crucible.yaml)"]
+            ENV["Env Vars\n(CRUCIBLE_API_KEY etc.)"]
         end
 
         subgraph InputLayer["Attack Ingestion"]
@@ -44,13 +44,13 @@ flowchart LR
         subgraph DataLayer["Data Stores"]
             CORPUS[("Attack Corpus\nPython dicts\npayloads/")]
             RESULTS[("Results Store\nreports/\nJSON, CSV, SARIF, PDF")]
-            CHK[("Checkpoint\n.ai-redteam-checkpoint.json")]
+            CHK[("Checkpoint\n.crucible-checkpoint.json")]
         end
 
     end
 
     subgraph CICD["CI/CD — GitHub Actions"]
-        GHA["Workflow\n.github/workflows/ai-redteam.yml"]
+        GHA["Workflow\n.github/workflows/crucible.yml"]
         SARIF_U["SARIF Upload\nGitHub Security tab"]
         PRC["PR Comment Bot\nscan scorecard"]
     end
