@@ -19,14 +19,12 @@
     </filter>
   </defs>
 
-  <!-- app-icon ground -->
   <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bg)" stroke="#242833" stroke-width="2"/>
 
-  <!-- outer hex node (flat-top) -->
+  <!-- outer hex node (flat-top) — the crucible vessel -->
   <polygon points="406,256 331,386 181,386 106,256 181,126 331,126"
            fill="none" stroke="url(#crimson)" stroke-width="14"
            stroke-linejoin="round" opacity="0.95"/>
-  <!-- faint inner hex for depth -->
   <polygon points="366,256 311,351 201,351 146,256 201,161 311,161"
            fill="none" stroke="#ff3355" stroke-width="2" opacity="0.18"/>
 
@@ -38,18 +36,16 @@
     <line x1="298" y1="256" x2="392" y2="256"/>
   </g>
 
-  <!-- neural probe nodes on the arms -->
+  <!-- neural probe nodes -->
   <g fill="#ff516b">
-    <circle cx="256" cy="120" r="12"/>
-    <circle cx="256" cy="392" r="12"/>
-    <circle cx="120" cy="256" r="12"/>
-    <circle cx="392" cy="256" r="12"/>
+    <circle cx="256" cy="120" r="12"/><circle cx="256" cy="392" r="12"/>
+    <circle cx="120" cy="256" r="12"/><circle cx="392" cy="256" r="12"/>
   </g>
 
-  <!-- breach accent: brightened top-right vertex -->
+  <!-- breach accent -->
   <circle cx="331" cy="126" r="16" fill="#ff8a9c" filter="url(#glow)"/>
 
-  <!-- target core -->
+  <!-- molten core (trial by fire) -->
   <circle cx="256" cy="256" r="30" fill="url(#core)" filter="url(#glow)"/>
   <circle cx="256" cy="256" r="11" fill="#fff2f4"/>
 </svg>
