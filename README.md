@@ -1,4 +1,8 @@
-# CRUCIBLE — CRUCIBLE · v3.0.0
+<p align="center">
+  <img src="docs/assets/crucible-card.svg" alt="CRUCIBLE — Adversarial AI, tested." width="720">
+</p>
+
+<h1 align="center">CRUCIBLE — CRUCIBLE · v3.0.0</h1>
 
 Black-box adversarial testing for AI / LLM systems. CRUCIBLE fires structured attack
 suites at any chat/completions endpoint, classifies the responses, and reports risk
