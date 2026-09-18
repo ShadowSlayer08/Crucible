@@ -1931,7 +1931,7 @@ def run(args):
         kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
         kb.reset()
         print(f"  {C.GREEN('✓')} Knowledge base wiped ({kb.db_path}).\n")
-        sys.exit(0)
+        return 0
     if getattr(args, "kb_seed", False):
         kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
         stats = kb_mod.seed_all(kb)
@@ -1940,7 +1940,7 @@ def run(args):
         print(f"    mitre_atlas     : {stats.get('mitre_atlas', 0)}")
         print(f"    owasp_llm       : {stats.get('owasp_llm', 0)}")
         print(f"    search mode     : {'semantic (bge-m3)' if kb.semantic else 'lexical'}\n")
-        sys.exit(0)
+        return 0
     if getattr(args, "kb_stats", False):
         kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
         st = kb.get_stats()
@@ -1950,7 +1950,7 @@ def run(args):
         for c, n in sorted(st["collections"].items()):
             print(f"    {c:<16}: {n}")
         print()
-        sys.exit(0)
+        return 0
     if getattr(args, "kb_search", None):
         kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
         if kb.count("attack_patterns") == 0:
@@ -1963,7 +1963,7 @@ def run(args):
             print(f"    {h['score']:.3f}  {C.CYAN(m.get('id', '?'))}  "
                   f"{m.get('name') or h['text'][:60]}")
         print()
-        sys.exit(0)
+        return 0
     if getattr(args, "slm_collect", False):
         import slm as slm_mod
         kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
@@ -1975,43 +1975,43 @@ def run(args):
         if info["written"] == 0:
             print(f"    {C.DIM('No dynamic-win patterns yet — run --evolve to grow the KB first.')}")
         print()
-        sys.exit(0)
+        return 0
 
     # ── Saved target profiles (before anything reads endpoint/model/schema) ───
     if getattr(args, "list_targets", False):
         targets_mod.print_targets()
-        sys.exit(0)
+        return 0
     if getattr(args, "delete_target", None):
         ok = targets_mod.delete_target(args.delete_target)
         print(f"  {C.GREEN('✓') if ok else C.YELLOW('•')} "
               f"{'Deleted target ' + args.delete_target if ok else 'No such target.'}\n")
-        sys.exit(0)
+        return 0
     if getattr(args, "save_target", None):
         ep = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         if not ep:
             print(f"  {C.RED('--save-target needs --endpoint')} (and --model/--schema).\n")
-            sys.exit(1)
+            return 1
         path = targets_mod.save_target(args.save_target, ep.rstrip("/"), args.model, args.schema)
         print(f"  {C.GREEN('✓')} Saved target '{C.CYAN(args.save_target)}' → {path}  "
               f"{C.DIM('(key not stored — pass --api-key / CRUCIBLE_API_KEY at run time)')}\n")
-        sys.exit(0)
+        return 0
     if getattr(args, "target", None):
         if not targets_mod.apply_target(args, args.target):
             print(f"  {C.RED('No saved target')} '{args.target}'. See --list-targets.\n")
-            sys.exit(1)
+            return 1
 
     print(banner())
 
     # ── --generate-config ─────────────────────────────────────────────────────
     if args.generate_config:
         generate_config_template(".crucible.yaml")
-        sys.exit(0)
+        return 0
 
     # ── --generate-template ───────────────────────────────────────────────────
     if args.generate_template:
         fmt = "json" if args.generate_template.endswith(".json") else "yaml"
         generate_template(args.generate_template, fmt)
-        sys.exit(0)
+        return 0
 
     # ── Load config file (before --list-schemas so config affects schema) ─────
     if not args.no_config:
@@ -2026,16 +2026,16 @@ def run(args):
 
     if args.list_schemas:
         print(list_schemas())
-        sys.exit(0)
+        return 0
 
     if getattr(args, "list_vulns", False):
         declarative.print_catalog()
-        sys.exit(0)
+        return 0
 
     if getattr(args, "eval_classifier", False):
         import classifier_eval
         classifier_eval.print_classifier_eval()
-        sys.exit(0)
+        return 0
 
     # ── --model-scan: static supply-chain scan of a model artifact, then exit ─
     if getattr(args, "model_scan", None):
@@ -2051,57 +2051,57 @@ def run(args):
                 print(f"  {C.DIM('JSON →')} {out}\n")
             except OSError:
                 pass
-        sys.exit(1 if report.is_dangerous else 0)
+        return 1 if report.is_dangerous else 0
 
     # ── --clear-cache: wipe the response cache, then exit ─────────────────────
     if getattr(args, "clear_cache", False):
         ok = cache_mod.clear_cache()
         print(f"  {C.GREEN('✓') if ok else C.YELLOW('•')} "
               f"{'Response cache cleared.' if ok else 'No cache to clear.'}\n")
-        sys.exit(0)
+        return 0
 
     # ── --clear-history: wipe the run-history DB, then exit ───────────────────
     if getattr(args, "clear_history", False):
         ok = trend.clear_history()
         print(f"  {C.GREEN('✓') if ok else C.YELLOW('•')} "
               f"{'Run history cleared.' if ok else 'No run history to clear.'}\n")
-        sys.exit(0)
+        return 0
 
     # ── --export-history: dump run history to CSV, then exit ──────────────────
     if getattr(args, "export_history", None):
         n = trend.export_history_csv(args.export_history)
         print(f"  {C.GREEN('✓')} Exported {n} run(s) → {C.CYAN(args.export_history)}\n")
-        sys.exit(0)
+        return 0
 
     # ── --diff-reports A,B: finding-level diff of two saved reports, then exit ─
     if getattr(args, "diff_reports", None):
         parts = [p.strip() for p in args.diff_reports.split(",")]
         if len(parts) != 2:
             print(f"  {C.RED('--diff-reports needs two files:')} A.json,B.json\n")
-            sys.exit(1)
+            return 1
         try:
             d = rundiff.diff_reports(parts[0], parts[1])
         except Exception as e:
             print(f"  {C.RED('Could not read reports:')} {e}\n")
-            sys.exit(1)
+            return 1
         rundiff.print_diff(d, os.path.basename(parts[0]), os.path.basename(parts[1]))
-        sys.exit(0)
+        return 0
 
     # ── --trend / --history: print run history from the SQLite DB, then exit ───
     if getattr(args, "trend", False):
         trend.print_trend(limit=20)
-        sys.exit(0)
+        return 0
 
     # ── --vector-poison: RAG retrieval-hijack simulation via bge-m3, then exit ─
     if getattr(args, "vector_poison", False):
         if not embeddings_mod.available():
             print(f"  {C.RED('bge-m3 embeddings unavailable.')} "
                   f"Start Ollama and run:  ollama pull bge-m3\n")
-            sys.exit(1)
+            return 1
         _ev = vector_poison.evaluate_poisoning(embeddings_mod.ollama_embed,
                                                k=getattr(args, "vector_poison_k", 3))
         vector_poison.print_vector_poison_report(_ev)
-        sys.exit(0)
+        return 0
 
     # ── --scope-wizard: deployment questionnaire → recommended plan ───────────
     if getattr(args, "scope_wizard", False):
@@ -2114,7 +2114,7 @@ def run(args):
         modes = scope_wizard.recommend_modes(answers)
         scope_wizard.print_test_plan(answers, modes)
         if not assume_yes:
-            sys.exit(0)
+            return 0
         # --yes: flow into a real run using the primary recommended mode.
         args.mode = modes[0] if modes else "redteam"
         print(f"  {C.CYAN('◈ --yes')}: proceeding with {C.BOLD('--mode ' + args.mode)}  "
@@ -2129,13 +2129,13 @@ def run(args):
             server.run(host=args.serve_host, port=args.serve_port)
         except RuntimeError as e:
             print(f"  {C.RED('Cannot start server:')} {e}\n")
-            sys.exit(1)
-        sys.exit(0)
+            return 1
+        return 0
 
     # ── --resume: check for checkpoint ────────────────────────────────────────
     if args.resume and not has_checkpoint():
         print(f"  {C.YELLOW('No checkpoint found.')} Start a fresh run without --resume.\n")
-        sys.exit(0)
+        return 0
 
     # ── --auto: autonomous red-team loop, then exit ───────────────────────────
     if getattr(args, "auto", False):
@@ -2153,9 +2153,9 @@ def run(args):
                     "extra_headers": _parse_extra_headers(args)}
         _apply_custom_overrides(auto_cfg, args)
         if not getattr(args, "ci", False) and not prompt_authorization():
-            print(f"\n  {C.RED('Aborted.')}\n"); sys.exit(0)
+            print(f"\n  {C.RED('Aborted.')}\n"); return 0
         if not enforce_roe_and_audit(args, auto_cfg["endpoint"], "auto"):
-            sys.exit(4)
+            return 4
         auto.run_auto(
             auto_cfg,
             attacker_endpoint=getattr(args, "attacker_endpoint", None),
@@ -2165,12 +2165,12 @@ def run(args):
             no_save=getattr(args, "no_save", False),
             anonymize=getattr(args, "anonymize", False),
         )
-        sys.exit(0)
+        return 0
 
     # ── --discover: fingerprint the target, then exit ─────────────────────────
     if getattr(args, "discover", False):
         if not require_authorization(args, "target discovery (live recon probes)"):
-            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); sys.exit(0)
+            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); return 0
         api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
         endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         schema   = args.schema or "openai"
@@ -2182,7 +2182,7 @@ def run(args):
             api_key = _read_line("  Enter API key: ", secret=True)
 
         if not enforce_roe_and_audit(args, endpoint, "discover"):
-            sys.exit(4)
+            return 4
 
         config = {
             "api_key":       api_key or "",
@@ -2202,7 +2202,7 @@ def run(args):
             output_dir=getattr(args, "output_dir", "./reports"),
             skip_connection_test=getattr(args, "skip_connection_test", False),
         )
-        sys.exit(0)
+        return 0
 
     # ── --recon / --full-stack: infra recon (AgentHound), then exit ───────────
     if getattr(args, "recon", False) or getattr(args, "recon_input", None) \
@@ -2211,36 +2211,36 @@ def run(args):
         full_stack = getattr(args, "full_stack", False)
 
         if not require_authorization(args, "infrastructure recon (AgentHound)"):
-            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); sys.exit(0)
+            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); return 0
 
         recon_input = getattr(args, "recon_input", None)
         if recon_input:
             if not os.path.exists(recon_input):
                 print(f"  {C.RED('✗')} --recon-input file not found: {recon_input}")
-                sys.exit(2)
+                return 2
             try:
                 with open(recon_input, encoding="utf-8") as f:
                     raw = json.load(f)
                 parsed = agenthound.parse(raw)
             except Exception as exc:
                 print(f"  {C.RED('✗')} Could not parse AgentHound JSON: {exc}")
-                sys.exit(2)
+                return 2
         else:
             scope = getattr(args, "recon_scope", None) or args.endpoint \
                 or os.environ.get("CRUCIBLE_ENDPOINT", "")
             if not scope:
                 print(f"  {C.RED('✗')} --recon needs --recon-scope (authorized infra "
                       f"CIDR/host/URL), or use --recon-input with an existing scan.")
-                sys.exit(2)
+                return 2
             if not enforce_roe_and_audit(args, scope, "recon",
                                          mode=getattr(args, "recon_mode", "stealth")):
-                sys.exit(4)
+                return 4
             print(f"  {C.DIM('Running AgentHound recon over')} {C.CYAN(scope)} "
                   f"{C.DIM('(' + getattr(args, 'recon_mode', 'stealth') + ')…')}")
             res = agenthound.run_scan(scope, mode=getattr(args, "recon_mode", "stealth"))
             if not res.get("ok"):
                 print(f"  {C.YELLOW('!')} {res.get('reason')}")
-                sys.exit(3)
+                return 3
             parsed = agenthound.parse(res["data"])
             raw = res.get("data")
 
@@ -2322,12 +2322,12 @@ def run(args):
                                         sarif_path, infra_findings=parsed.get("findings", []))
                     print(f"  {C.GREEN('✓')} Full-stack report → {C.CYAN(fs_path)}\n")
 
-        sys.exit(0)
+        return 0
 
     # ── --extract: active model-stealing engine, then exit ────────────────────
     if getattr(args, "extract", False):
         if not require_authorization(args, "the active model-stealing engine"):
-            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); sys.exit(0)
+            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); return 0
         api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
         endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
         schema   = args.schema or "openai"
@@ -2339,7 +2339,7 @@ def run(args):
             api_key = _read_line("  Enter API key: ", secret=True)
 
         if not enforce_roe_and_audit(args, endpoint, "extract"):
-            sys.exit(4)
+            return 4
 
         config = {
             "api_key":       api_key or "",
@@ -2361,7 +2361,7 @@ def run(args):
             skip_connection_test=getattr(args, "skip_connection_test", False),
             determinism_samples=getattr(args, "extract_samples", 5),
         )
-        sys.exit(1 if report and report["overall_risk_score"] >= 45 else 0)
+        return 1 if report and report["overall_risk_score"] >= 45 else 0
 
     # ── --multi-turn: adversarial conversation scenarios, then exit ───────────
     if getattr(args, "multi_turn", False):
@@ -2390,30 +2390,30 @@ def run(args):
 
         if not prompt_authorization():
             print(f"\n  {C.RED('Aborted.')}\n")
-            sys.exit(0)
+            return 0
         if not enforce_roe_and_audit(args, config["endpoint"], "multi-turn"):
-            sys.exit(4)
+            return 4
 
         run_multiturn(
             config,
             output_dir=getattr(args, "output_dir", "./reports"),
             skip_connection_test=getattr(args, "skip_connection_test", False),
         )
-        sys.exit(0)
+        return 0
 
     # ── --crescendo: adaptive multi-turn attack, then exit ────────────────────
     if getattr(args, "crescendo", False):
         import crescendo as crescendo_mod
         from dynamic_engine import AttackerLLM
         if not require_authorization(args, "the Crescendo adaptive multi-turn attack"):
-            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); sys.exit(0)
+            print(f"\n  {C.RED('Aborted — authorization required.')}\n"); return 0
 
         goal = getattr(args, "crescendo_goal", None)
         if not goal:
             goal = _read_line("  Enter the crescendo goal (what the target should reveal/do): ")
         if not goal:
             print(f"  {C.RED('✗')} --crescendo needs --crescendo-goal.")
-            sys.exit(2)
+            return 2
 
         api_key  = args.api_key or os.environ.get("CRUCIBLE_API_KEY", "")
         endpoint = args.endpoint or os.environ.get("CRUCIBLE_ENDPOINT", "")
@@ -2434,7 +2434,7 @@ def run(args):
 
         if not enforce_roe_and_audit(args, config["endpoint"], "crescendo",
                                      mode=getattr(args, "crescendo_category", "Jailbreak")):
-            sys.exit(4)
+            return 4
 
         attacker = AttackerLLM(model=getattr(args, "attacker_model", "kimi-k2"),
                                endpoint=getattr(args, "attacker_endpoint", "http://localhost:11434"))
@@ -2454,7 +2454,7 @@ def run(args):
                 json.dump(result, f, indent=2, ensure_ascii=False)
             print(f"  {C.GREEN('✓')} Saved → {C.CYAN(path)}\n")
 
-        sys.exit(1 if result.get("success") else 0)
+        return 1 if result.get("success") else 0
 
     return run_main_pipeline(args)
 
