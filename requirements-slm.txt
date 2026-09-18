@@ -16,7 +16,7 @@ bitsandbytes>=0.43        # 4-bit quant; Windows wheels exist (else use WSL2)
 # unsloth                 # pip install unsloth  → 2-4x faster, ~70% less VRAM
 
 # MoE / weight merge (slm/merge.py) --------------------------------------------
-mergekit>=0.0.4
+mergekit>=0.1.4
 
 # GGUF export (slm/export.py) also needs llama.cpp (clone + build separately) and
 # Ollama (you already have it) — neither is a pip dependency:
