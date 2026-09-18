@@ -1926,7 +1926,20 @@ def run(args):
         args.kb_augmented = True
         args.kb_grow = True
 
-    # ── Knowledge-base admin (Phase 6B), then exit ────────────────────────────
+    # ── command dispatch: first matching subcommand handles it and returns an
+    #    exit code; None means fall through to the behavioural pipeline ──────
+    code = _dispatch(args)
+    if code is not None:
+        return code
+    return run_main_pipeline(args)
+
+
+def _dispatch(args) -> 'int | None':
+    """Ordered early-exit command dispatch for run(). Each subcommand block runs
+    in declaration order (the ordering is load-bearing — e.g. the config-file load
+    sits between the target-book handlers and the schema/list handlers). A block
+    that handles the invocation returns its exit code; if none match, returns None
+    so run() falls through to run_main_pipeline()."""
     if getattr(args, "kb_reset", False):
         kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
         kb.reset()
@@ -2456,7 +2469,8 @@ def run(args):
 
         return 1 if result.get("success") else 0
 
-    return run_main_pipeline(args)
+
+    return None
 
 
 def run_main_pipeline(args):
