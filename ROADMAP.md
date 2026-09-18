@@ -27,28 +27,36 @@ target is remote; all-local runs are free.
 
 ---
 
-## Stage A — Payload Intelligence Foundation  *(linchpin; unblocks B)*
+## Stage A — Payload Intelligence Foundation  *(linchpin; unblocks B)*  ✅ DONE
 
-Add metadata to every existing suite (`vapt`, `redteam`, `atlas`, and the v3.0 modes).
-Mechanical but high-leverage — parallelisable one agent per file.
-
-| ID | Task | Roadmap # | Effort | Status |
-|----|------|-----------|--------|--------|
-| A1 | Add `source` / `effectiveness_tier` (A–D) / `last_validated` / `model_targets` to every test dict | #43 | M | ✗ |
-| A2 | Add `failure_mode_target` (partial_refusal / hidden_compliance / no_output / misleading / silent) | #44 | M | ✗ |
-| A3 | Add `llama_guard_category` (S1–S14) to **all** suites (today only policy + memory-poison) | #45 | M | ✗ |
-| A4 | `LG_CATEGORY_NAMES` map + validation in corpus-integrity tests | #45 | S | ✗ |
-
-## Stage B — Coverage, Failure-Mode & Source Reporting  *(depends A)*
+> **Built-different (verified 2026-09-19):** implemented as a DRY **runtime enrichment
+> layer** (`metadata.enrich_metadata`, like `enrich_test`/`enrich_owasp`) instead of
+> editing every suite's dicts. Wired into `main.py` (base/custom/corpus/plugin tests),
+> `auto.py`, and `server.py`; `LG_CATEGORY_NAMES` is the single source of truth (shared
+> with `coverage_report`). Tests: `tests/test_metadata.py`. So every suite now carries
+> `source`/`effectiveness_tier`/`last_validated`/`model_targets`/`failure_mode_target`/
+> `llama_guard_category` at run time — no per-file rollout needed.
 
 | ID | Task | Roadmap # | Effort | Status |
 |----|------|-----------|--------|--------|
-| B1 | Coverage score across **all** modes (not just policy) once A3 lands | #36 | S | ◑ |
-| B2 | Failure-mode detection in `classifier.py` + `detected_failure_mode` field | #44 | S | ✗ |
-| B3 | FAILURE MODE DISTRIBUTION ASCII bar/pie section in reporter | #57 | S | ✗ |
-| B4 | Source-audit pre-check: warn if >30% D-tier; `--force-stale` / `--skip-source-audit` | #48 | S | ✗ |
-| B5 | PAYLOAD QUALITY AUDIT report section + JSON `payload_quality_audit` | #61 | S | ✗ |
-| B6 | CR / completion-rate: follow-up judge probe in agent/rag modes; `task_completed` field | #40 | M | ✗ |
+| A1 | `source` / `effectiveness_tier` (A–D) / `last_validated` / `model_targets` — via `_PREFIX_PROVENANCE` + `enrich_metadata` | #43 | M | ✅ |
+| A2 | `failure_mode_target` (partial_refusal / hidden_compliance / no_output / misleading / silent) — `_failure_mode()` | #44 | M | ✅ |
+| A3 | `llama_guard_category` (S1–S14) on **all** suites — `_llama_guard()` resolves from field/tag/keyword at run time | #45 | M | ✅ |
+| A4 | `LG_CATEGORY_NAMES` map + validation (`metadata.py`, honored by `coverage_report`) | #45 | S | ✅ |
+
+## Stage B — Coverage, Failure-Mode & Source Reporting  *(depends A)*  ✅ DONE
+
+> **Verified 2026-09-19:** all wired in `main.py` + `payload_audit.py` + `classifier.py` +
+> `metrics.py`. Tests: `tests/test_stage_b.py`, `tests/test_coverage.py`, `tests/test_arch_fixes.py`.
+
+| ID | Task | Roadmap # | Effort | Status |
+|----|------|-----------|--------|--------|
+| B1 | Coverage across **all** modes (now that A3 resolves S-codes everywhere) — `coverage_report.py` | #36 | S | ✅ |
+| B2 | Failure-mode detection — `classifier.py` emits `detected_failure_mode` (`_FAILURE_MODE`) | #44 | S | ✅ |
+| B3 | `◈ FAILURE MODE DISTRIBUTION` section (in `main.py` reporter path) | #57 | S | ✅ |
+| B4 | Source-audit pre-check: warns >30% D-tier; `--force-stale` / `--skip-source-audit` | #48 | S | ✅ |
+| B5 | `PAYLOAD QUALITY AUDIT` section + JSON (`payload_audit.py`, `--payload-audit`) | #61 | S | ✅ |
+| B6 | CR / completion-rate: `_run_completion_rate()` follow-up judge probe + `task_completed`; `--completion-rate` | #40 | M | ✅ |
 
 ## Stage C — Pre-Run Targeting  *(enables the SLM/LLM router in Stage D)*
 
@@ -63,10 +71,10 @@ Mechanical but high-leverage — parallelisable one agent per file.
 
 | ID | Task | Effort | Status |
 |----|------|--------|--------|
-| D1 | Ollama preflight: ping `/api/tags`, verify model tag exists, friendly error if down | S | ✗ |
-| D2 | `--local-attacker` convenience flag → sets `--dynamic --attacker-endpoint http://localhost:11434 --attacker-model hauhaucs-cybersec-27b:latest` | S | ✗ |
-| D3 | `--local-judge` convenience flag → sets `--judge --judge-schema ollama --judge-endpoint localhost:11434 --judge-model <cyber27b>` | S | ✗ |
-| D4 | `--profile slm` / `--profile llm` presets that bundle the right mode set + `--samples` (driven by C1) | M | ✗ |
+| D1 | Ollama preflight: ping `/api/tags`, verify model tag exists, friendly error if down — `local_engine.is_available`/`pick_model` under `--local`/`--offline` | S | ✅ |
+| D2 | `--local-attacker` one-flag alias (capability exists via `--dynamic --attacker-endpoint … --attacker-model …`; the *alias* is the only gap) | S | ✗ |
+| D3 | Local-judge convenience — shipped as `--judge-local` / `--judge-local-model` (different flag name than spec'd) | S | ✅ |
+| D4 | `--profile slm` / `--profile llm` presets bundling mode set + `--samples` — `profile_presets.py` (see also H6) | M | ✅ |
 | D5 | Long-context routing: when target context ≥ 32K (the 27B is 256K), auto-enable `--mode rag-long --context-tokens 32000` | S | ✗ |
 | D6 | Tool-capability routing: when target advertises `tools`, include `mcp` + `agentic` modes | S | ✗ |
 | D7 | Benchmark routing: pick SLM baselines (Qwen/Gemma/DeepSeek) vs LLM baselines (GPT-4/Claude) by param-size | S | ◑ |
