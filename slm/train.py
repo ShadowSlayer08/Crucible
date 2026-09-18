@@ -122,6 +122,140 @@ def split_holdout(examples: list, frac: float = 0.1, seed: int = 1234):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ANTI-FORGETTING RECIPE  (pure stdlib — importable and testable without torch)
+#
+# The flagship SLM A/B returned KEEP-the-base (Δ-33.3%) because a tiny attack-only
+# LoRA on attention projections caused catastrophic forgetting. The recipe below is
+# the root-cause fix: target ALL linear layers (incl. MLP), optionally DoRA/rsLoRA
+# for small-data stability, and MIX IN general-instruction replay so the model keeps
+# its base ability instead of collapsing onto the attack set.
+# ─────────────────────────────────────────────────────────────────────────────
+_LORA_TARGET_PRESETS = {
+    "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
+    "mlp":       ["q_proj", "k_proj", "v_proj", "o_proj",
+                  "gate_proj", "up_proj", "down_proj"],
+    "all-linear": "all-linear",   # PEFT resolves this to every linear layer
+}
+
+
+def resolve_lora_targets(name: str = "all-linear"):
+    """Resolve a target-module preset (or a custom comma-list). 'all-linear' (the new
+    default) spreads the adapter across MLP as well as attention — a key
+    anti-forgetting lever vs the old attention-only set. Returns a list, the literal
+    'all-linear' string PEFT understands, or a parsed custom list."""
+    if not name:
+        return list(_LORA_TARGET_PRESETS["attention"])
+    key = name.strip().lower()
+    if key in _LORA_TARGET_PRESETS:
+        t = _LORA_TARGET_PRESETS[key]
+        return list(t) if isinstance(t, list) else t
+    if "," in name:
+        return [t.strip() for t in name.split(",") if t.strip()]
+    return name
+
+
+def default_replay_set() -> list:
+    """A small bundled set of BENIGN general-instruction examples. Mixed into training
+    to preserve the base model's general ability (anti-forgetting). Non-adversarial —
+    ordinary helpful-assistant tasks. Supply a larger set via --replay-file."""
+    pairs = [
+        ("Summarize the water cycle in two sentences.",
+         "Water evaporates from oceans and lakes into the atmosphere, then condenses into clouds. It falls back as precipitation and flows through rivers and groundwater to the sea, repeating the cycle."),
+        ("Write a Python function that returns the nth Fibonacci number.",
+         "def fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a"),
+        ("Explain what a hash table is to a beginner.",
+         "A hash table stores key–value pairs. It runs the key through a hash function to pick a slot, so lookups, inserts, and deletes are usually near-instant regardless of how many items it holds."),
+        ("Translate 'good morning, how are you?' into Spanish.",
+         "Buenos días, ¿cómo estás?"),
+        ("Give three tips for writing clear commit messages.",
+         "1. Use an imperative summary under ~50 characters. 2. Explain the why, not just the what, in the body. 3. Reference related issues or context so future readers can follow the change."),
+        ("What is the capital of Japan?", "The capital of Japan is Tokyo."),
+        ("Rewrite this sentence to be more concise: 'Due to the fact that it was raining, we decided to stay inside.'",
+         "Because it was raining, we stayed inside."),
+        ("List the primary colors.", "The primary colors are red, blue, and yellow."),
+        ("Explain the difference between a list and a tuple in Python.",
+         "A list is mutable — you can change, add, or remove items after creation. A tuple is immutable — once created its contents are fixed, which makes it hashable and slightly faster."),
+        ("Convert 2.5 kilometers to meters.", "2.5 kilometers is 2,500 meters."),
+        ("Write a haiku about autumn.",
+         "Crisp leaves drift and fall\nAmber light on quiet paths\nAutumn breathes farewell"),
+        ("What does the acronym API stand for?",
+         "API stands for Application Programming Interface — a defined set of rules that lets software components talk to each other."),
+        ("Suggest a healthy breakfast idea.",
+         "Greek yogurt topped with berries, a handful of nuts, and a drizzle of honey is quick, balanced, and high in protein."),
+        ("Explain photosynthesis in one sentence.",
+         "Photosynthesis is the process by which plants use sunlight, water, and carbon dioxide to produce oxygen and glucose."),
+        ("How do I center a div horizontally with CSS flexbox?",
+         "Set the parent to display: flex and justify-content: center; the child will be centered horizontally."),
+        ("What is 15% of 200?", "15% of 200 is 30."),
+        ("Give a synonym for 'happy'.", "'Joyful' is a good synonym for 'happy'."),
+        ("Explain what version control is.",
+         "Version control tracks changes to files over time, letting multiple people collaborate, review history, and revert to earlier states without losing work."),
+        ("Write a one-line description of the sun.",
+         "The sun is the star at the center of our solar system, providing light and heat to Earth."),
+        ("Sort these numbers ascending: 4, 1, 3, 2.", "1, 2, 3, 4"),
+        ("What is the boiling point of water at sea level in Celsius?",
+         "At sea level, water boils at 100 degrees Celsius."),
+        ("Suggest a good name for a note-taking app.",
+         "'Jotly' is a friendly, memorable name for a note-taking app."),
+        ("Explain recursion briefly.",
+         "Recursion is when a function calls itself to solve smaller instances of a problem, with a base case that stops the calls."),
+        ("Turn this into passive voice: 'The team shipped the release.'",
+         "The release was shipped by the team."),
+    ]
+    return [{"instruction": i, "input": "", "output": o, "meta": {"type": "replay"}}
+            for i, o in pairs]
+
+
+def load_replay(path: str) -> list:
+    """Load a general-instruction replay JSONL ({instruction,[input],output}).
+    Returns [] if the file is missing/empty; malformed rows are skipped."""
+    if not path or not os.path.exists(path):
+        return []
+    out = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict) and obj.get("instruction") and obj.get("output"):
+                obj.setdefault("input", "")
+                obj.setdefault("meta", {})
+                out.append(obj)
+    return out
+
+
+def mix_replay(attack_examples: list, replay_examples: list,
+               ratio: float = 0.3, seed: int = 1234) -> list:
+    """Mix general-instruction replay examples into the attack set so replay forms
+    ~`ratio` of the total (deterministic). Returns attack examples first, then the
+    selected replay examples (cycled if the pool is small), each tagged
+    meta.type='replay'. ratio is clamped to [0, 0.9]."""
+    ratio = max(0.0, min(0.9, float(ratio)))
+    a = len(attack_examples)
+    if not attack_examples or ratio <= 0 or not replay_examples:
+        return list(attack_examples)
+    import random
+    n_replay = max(1, round(ratio * a / (1 - ratio)))
+    rng = random.Random(seed)
+    pool, selected = list(replay_examples), []
+    while len(selected) < n_replay:
+        rng.shuffle(pool)
+        selected.extend(pool[:min(len(pool), n_replay - len(selected))])
+    tagged = []
+    for e in selected:
+        e2 = dict(e)
+        meta = dict(e2.get("meta") or {})
+        meta["type"] = "replay"
+        e2["meta"] = meta
+        tagged.append(e2)
+    return list(attack_examples) + tagged
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ENVIRONMENT PROBE  (no heavy import unless present)
 # ─────────────────────────────────────────────────────────────────────────────
 def _has(module: str) -> bool:
@@ -343,13 +477,23 @@ def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
             pass
     print(C.DIM(f"  load mode: {'4-bit QLoRA' if used_4bit else 'bf16 LoRA'}"))
 
+    # Anti-forgetting LoRA: all-linear targets (incl. MLP) by default, with optional
+    # DoRA / rsLoRA — passed only if the installed PEFT accepts them (version-safe).
+    import inspect as _inspect
+    _lora_params = _inspect.signature(LoraConfig).parameters
+    _lora_extra = {}
+    if cfg.get("use_dora") and "use_dora" in _lora_params:
+        _lora_extra["use_dora"] = True
+    if cfg.get("use_rslora") and "use_rslora" in _lora_params:
+        _lora_extra["use_rslora"] = True
     lora = LoraConfig(
         r=cfg["lora_r"],
         lora_alpha=cfg["lora_alpha"],
         lora_dropout=cfg["lora_dropout"],
-        target_modules=LORA_TARGET_MODULES,
+        target_modules=cfg.get("target_modules") or LORA_TARGET_MODULES,
         bias="none",
         task_type="CAUSAL_LM",
+        **_lora_extra,
     )
 
     train_ds = Dataset.from_dict({"text": train_texts})
@@ -435,7 +579,13 @@ def train(dataset_path: str = DEFAULT_DATASET,
           max_seq_length: int = 2048,
           val_frac: float = 0.1,
           seed: int = 1234,
-          four_bit: bool = True) -> dict:
+          four_bit: bool = True,
+          target_modules: str = "all-linear",
+          use_dora: bool = False,
+          use_rslora: bool = False,
+          replay_ratio: float = 0.3,
+          replay_file: str = None,
+          no_replay: bool = False) -> dict:
     """LoRA fine-tune `base_model` on the collector's JSONL and save the adapter.
 
     Returns a result dict. On a machine without a GPU / training backend this
@@ -457,6 +607,22 @@ def train(dataset_path: str = DEFAULT_DATASET,
     if not examples:
         print(C.RED("✗ dataset is empty — nothing to train on."))
         return {"ok": False, "reason": "dataset-empty", "path": dataset_path}
+
+    # Anti-forgetting: mix in general-instruction replay so the SLM keeps its base
+    # ability instead of collapsing onto the (often tiny) attack set — the root-cause
+    # fix for the KEEP-base A/B result.
+    n_attack = len(examples)
+    if not no_replay and replay_ratio > 0:
+        replay = load_replay(replay_file) or default_replay_set()
+        examples = mix_replay(examples, replay, ratio=replay_ratio, seed=seed)
+        n_replay = len(examples) - n_attack
+        if n_replay:
+            src = replay_file if replay_file and load_replay(replay_file) else "built-in"
+            print(C.DIM(f"  + {n_replay} general-instruction replay examples "
+                        f"(~{replay_ratio:.0%}, {src}) to prevent catastrophic forgetting"))
+    if n_attack < 200 and not no_replay:
+        print(C.YELLOW("  ! small attack set — grow the KB further (--evolve) for a "
+                       "stronger, non-regressive fine-tune."))
 
     train_ex, val_ex = split_holdout(examples, frac=val_frac, seed=seed)
     train_texts = [format_chatml(e) for e in train_ex]
@@ -485,6 +651,9 @@ def train(dataset_path: str = DEFAULT_DATASET,
         "lora_r": lora_r, "lora_alpha": lora_alpha, "lora_dropout": lora_dropout,
         "batch_size": batch_size, "grad_accum": grad_accum, "lr": lr,
         "max_seq_length": max_seq_length, "seed": seed, "four_bit": four_bit,
+        "target_modules": resolve_lora_targets(target_modules),
+        "use_dora": bool(use_dora), "use_rslora": bool(use_rslora),
+        "n_attack": n_attack, "n_replay": len(examples) - n_attack,
     }
     os.makedirs(out_dir, exist_ok=True)
     print(C.DIM(f"  backend={env['backend']}  base={base_model}  "
@@ -536,6 +705,24 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-4bit", action="store_true",
                    help="skip 4-bit QLoRA (bitsandbytes) and use a bf16 LoRA instead "
                         "— use when bitsandbytes lacks kernels for your GPU (e.g. Blackwell)")
+    # ── anti-forgetting recipe ────────────────────────────────────────────────
+    p.add_argument("--target-modules", default="all-linear",
+                   help="LoRA target set: 'all-linear' (default, incl. MLP), 'mlp', "
+                        "'attention', or a custom comma-list. all-linear spreads the "
+                        "adapter beyond attention to reduce catastrophic forgetting.")
+    p.add_argument("--dora", action="store_true",
+                   help="Use DoRA (weight-decomposed LoRA) — more stable on small data")
+    p.add_argument("--rslora", action="store_true",
+                   help="Use rank-stabilized LoRA (helps at higher --lora-r)")
+    p.add_argument("--replay-file", default=None,
+                   help="General-instruction replay JSONL ({instruction,[input],output}) "
+                        "to mix in (e.g. an Alpaca/Dolly sample). Default: a built-in set.")
+    p.add_argument("--replay-ratio", type=float, default=0.3,
+                   help="Fraction of the training set that should be replay examples "
+                        "(default 0.3). Prevents forgetting on small attack sets.")
+    p.add_argument("--no-replay", action="store_true",
+                   help="Disable replay mixing (train on attack examples only — the old, "
+                        "forgetting-prone behaviour).")
     return p
 
 
@@ -560,7 +747,10 @@ def main(argv=None) -> int:
         epochs=args.epochs, lora_r=args.lora_r, lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout, batch_size=args.batch_size,
         grad_accum=args.grad_accum, lr=args.lr, max_seq_length=args.max_seq_length,
-        val_frac=args.val_frac, seed=args.seed, four_bit=not args.no_4bit)
+        val_frac=args.val_frac, seed=args.seed, four_bit=not args.no_4bit,
+        target_modules=args.target_modules, use_dora=args.dora, use_rslora=args.rslora,
+        replay_file=args.replay_file, replay_ratio=args.replay_ratio,
+        no_replay=args.no_replay)
     return 0 if result.get("ok") else 1
 
 
