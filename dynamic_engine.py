@@ -376,11 +376,26 @@ class AttackerLLM:
         model:    str = DEFAULT_MODEL,
         endpoint: str = DEFAULT_ENDPOINT,
         timeout:  int = DEFAULT_TIMEOUT,
+        models:   Optional[list] = None,
     ) -> None:
-        self.model    = model
+        # Ensemble attackers (H3): rotate the *generating* model per --dynamic
+        # round so mutations don't collapse to one model's style. Falls back to
+        # the single `model` when no ensemble is given. `call()` reads
+        # `self.model` per request, so rotate() transparently swaps the generator.
+        self.ensemble: Optional[list] = [
+            m.strip() for m in (models or []) if isinstance(m, str) and m.strip()
+        ] or None
+        self.model    = self.ensemble[0] if self.ensemble else model
         self.endpoint = endpoint.rstrip("/")
         self.timeout  = timeout
         self.history:  list[AttemptRecord] = []
+
+    def rotate(self, index: int) -> str:
+        """Point `self.model` at ensemble member *index* (round-robin) and return
+        it. No-op returning the single model when no ensemble was configured."""
+        if self.ensemble:
+            self.model = self.ensemble[index % len(self.ensemble)]
+        return self.model
 
     # ── Public interface ──────────────────────────────────────────────────────
 
@@ -841,6 +856,13 @@ class DynamicRedTeamer:
 
         return response_text, verdict, conf
 
+    def _rotate_attacker(self, index: int) -> None:
+        """H3: rotate the ensemble attacker for round *index*, tolerating attacker
+        stubs / older attackers that don't implement rotate()."""
+        rot = getattr(self.attacker, "rotate", None)
+        if callable(rot):
+            rot(index)
+
     # ── Public API ────────────────────────────────────────────────────────────
 
     def run_pair_loop(self, base_test: dict) -> "PairLoopResult":
@@ -886,6 +908,7 @@ class DynamicRedTeamer:
         # crafts a CUSTOM opening payload, instead of firing the seed verbatim.
         if self.kb_augment:
             try:
+                self._rotate_attacker(0)   # H3: first ensemble member crafts the opener
                 custom = self.attacker.generate_initial(
                     intent=payload, category=category, kb_examples=kb_examples)
                 if custom and custom.strip():
@@ -895,6 +918,7 @@ class DynamicRedTeamer:
                 pass
 
         for rnd in range(self.max_rounds):
+            self._rotate_attacker(rnd)   # H3: rotate the generating model each round
             probe["payload"] = payload
             t0               = time.time()
             response_text, verdict, confidence = self._fire(probe)
@@ -913,11 +937,12 @@ class DynamicRedTeamer:
                 elapsed_sec    = elapsed,
             )
             attempts.append({
-                "round":    rnd + 1,
-                "payload":  payload,
-                "verdict":  verdict,
-                "strategy": current_strategy,
-                "elapsed":  elapsed,
+                "round":         rnd + 1,
+                "payload":       payload,
+                "verdict":       verdict,
+                "strategy":      current_strategy,
+                "elapsed":       elapsed,
+                "attacker_model": getattr(self.attacker, "model", ""),  # H3: model this round
             })
 
             if verdict == "FAIL":
