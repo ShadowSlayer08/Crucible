@@ -42,7 +42,7 @@ py-modules = [
     "checkpoint", "classifier", "classifier_eval", "colors", "compliance", "corpus",
     "config_loader", "coverage_report", "crescendo", "declarative", "defence_audit", "discover",
     "dynamic_engine", "embeddings", "engine", "engine_browser", "extraction", "fullstack",
-    "guardrails", "length_optimizer", "local_engine", "longcontext", "main",
+    "graders", "guardrails", "length_optimizer", "local_engine", "longcontext", "main",
     "metadata", "metrics", "modelscan", "multimodal",
     "multiturn", "nist", "notify", "obfuscation_wrapper", "owasp", "owasp_agentic",
     "remediation",
