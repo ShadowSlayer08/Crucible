@@ -117,6 +117,7 @@ import defence_audit
 import transferability as transferability_mod
 import threat_ontology
 import benchmarks
+import graders
 
 ALL_TESTS       = VAPT_TESTS + REDTEAM_TESTS
 ALL_ATLAS_TESTS = VAPT_TESTS + REDTEAM_TESTS + ATLAS_NEW_TESTS
@@ -522,6 +523,15 @@ def build_parser():
                    help="Print Llama Guard S1-S14 + OWASP coverage heatmap and score")
     p.add_argument("--benchmarks", action="store_true",
                    help="Compare your ASR against published research baselines")
+    p.add_argument("--grader", choices=["harmbench", "jailbreakbench", "strongreject", "all"],
+                   metavar="RUBRIC",
+                   help="Re-score the run under a published jailbreak-eval rubric "
+                        "(harmbench | jailbreakbench | strongreject | all) so the ASR is "
+                        "comparable to that paper's numbers. Uses a heuristic grader offline; "
+                        "add --grader-judge to route the rubric through the attacker LLM.")
+    p.add_argument("--grader-judge", action="store_true",
+                   help="Grade with the attacker LLM (--attacker-endpoint/--attacker-model) "
+                        "applying each rubric's judge prompt, instead of the offline heuristic")
     p.add_argument("--recommend", action="store_true",
                    help="After the run, print defensive 'teaching prompt' recommendations "
                         "to harden the target against the failure classes observed")
@@ -3057,6 +3067,22 @@ def run_main_pipeline(args):
         _total = max(1, len(results))
         _asr = round(sum(1 for r in results if r["result"]["verdict"] == "FAIL") / _total * 100, 1)
         benchmarks.print_benchmark_comparison(config.get("model", ""), _asr)
+
+    if getattr(args, "grader", None):
+        grader_judge = None
+        if getattr(args, "grader_judge", False):
+            try:
+                from dynamic_engine import AttackerLLM
+                _grjudge = AttackerLLM(
+                    model=getattr(args, "attacker_model", "kimi-k2"),
+                    endpoint=getattr(args, "attacker_endpoint", "http://localhost:11434"))
+
+                def grader_judge(prompt):   # noqa: E306 — routed rubric judge
+                    return _grjudge.call(prompt, temperature=0.0, max_tokens=256)
+            except Exception:
+                grader_judge = None
+        graders.print_grader_report(config.get("model", ""), results, args.grader,
+                                    judge=grader_judge)
 
     if getattr(args, "threat_ontology", False):
         fails = [r for r in results if r["result"]["verdict"] == "FAIL"]
