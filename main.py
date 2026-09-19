@@ -940,6 +940,11 @@ def build_parser():
                         "(default: http://localhost:11434)")
     p.add_argument("--attacker-model", metavar="MODEL", default="kimi-k2",
                    help="Ollama model tag for the attacker LLM (default: kimi-k2)")
+    p.add_argument("--local-attacker", action="store_true",
+                   help="One-flag preset: turn on --dynamic and point the attacker LLM at the "
+                        "local Ollama daemon, auto-picking a pulled chat model (prefers an "
+                        "uncensored one) when --attacker-model isn't set. The target is "
+                        "unaffected — it can still be remote.")
     p.add_argument("--ensemble-attackers", metavar="M1,M2,…",
                    help="Rotate the attacker LLM across these comma-separated Ollama "
                         "model tags — one per --dynamic round — so mutations don't "
@@ -1159,6 +1164,33 @@ def _apply_local(args) -> None:
         print(f"  {C.RED('--offline requires a local endpoint')} (got {args.endpoint}).\n")
         sys.exit(1)
     print()
+
+
+def _apply_local_attacker(args) -> None:
+    """--local-attacker (roadmap D2): one-flag preset for a local Ollama attacker.
+    Turns on --dynamic and points the attacker LLM at the local daemon, auto-picking
+    a pulled chat model (preferring an uncensored one) when --attacker-model wasn't
+    set. Mutates args in place BEFORE config is built. The TARGET is untouched — it
+    can still be a remote endpoint."""
+    if not getattr(args, "local_attacker", False):
+        return
+    args.dynamic = True
+    if not getattr(args, "attacker_endpoint", None):
+        args.attacker_endpoint = local_engine.DEFAULT_HOST
+
+    # Auto-pick a local chat model only when the user kept the default.
+    if getattr(args, "attacker_model", "kimi-k2") in ("kimi-k2", None, ""):
+        eng = local_engine.LocalLLMEngine(host=args.attacker_endpoint)
+        if eng.is_available():
+            chat = eng.chat_models()
+            prefer = next((m for m in chat if any(
+                h in m.lower() for h in
+                ("uncensor", "cybersec", "abliterat", "dolphin", "hermes", "kimi"))), None)
+            args.attacker_model = prefer or eng.pick_model()
+
+    print(f"  {C.CYAN('◈ LOCAL ATTACKER')}  —  "
+          f"{C.BOLD(getattr(args, 'attacker_model', 'kimi-k2'))} @ {args.attacker_endpoint}  "
+          f"{C.DIM('(--dynamic on)')}")
 
 
 def _open_kb(args, seed_if_empty: bool = True):
@@ -1915,6 +1947,7 @@ def run(args):
 
     # ── --local / --offline: normalise to the local Ollama daemon (air-gap) ───
     _apply_local(args)
+    _apply_local_attacker(args)   # --local-attacker: one-flag local attacker preset
 
     # ── --rps / --delay: client-side pacing (applies to every path, incl. --extract) ─
     if getattr(args, "rps", None) or getattr(args, "delay", None):
