@@ -930,6 +930,12 @@ def build_parser():
                         "(default: http://localhost:11434)")
     p.add_argument("--attacker-model", metavar="MODEL", default="kimi-k2",
                    help="Ollama model tag for the attacker LLM (default: kimi-k2)")
+    p.add_argument("--ensemble-attackers", metavar="M1,M2,…",
+                   help="Rotate the attacker LLM across these comma-separated Ollama "
+                        "model tags — one per --dynamic round — so mutations don't "
+                        "collapse to a single model's style. Overrides --attacker-model "
+                        "for generation. E.g. --ensemble-attackers "
+                        "hauhaucs-cybersec-27b:latest,supergemma4-26b-uncensored")
     p.add_argument("--dynamic-rounds", type=int, default=5, metavar="N",
                    help="Maximum mutation+retry rounds per test in dynamic mode "
                         "(default: 5)")
@@ -3202,14 +3208,22 @@ def run_main_pipeline(args):
         dynamic_rounds    = max(1, getattr(args, "dynamic_rounds",   5))
         only_failed       = getattr(args, "dynamic_only_failed", False)
         dyn_judge         = getattr(args, "dynamic_judge",      False)
+        ensemble_attackers = [
+            m.strip() for m in (getattr(args, "ensemble_attackers", "") or "").split(",")
+            if m.strip()
+        ]
 
         print(f"\n  {C.BOLD(C.CYAN('◈ DYNAMIC RED TEAM'))}")
         print(f"  Attacker  : {C.BOLD(attacker_model)}  @  {C.DIM(attacker_endpoint)}")
+        if ensemble_attackers:
+            print(f"  Ensemble  : {C.BOLD(' → '.join(ensemble_attackers))}  "
+                  f"{C.DIM('(rotating per round)')}")
         print(f"  Max rounds: {dynamic_rounds}"
               + ("  |  only-failed" if only_failed else "")
               + ("  |  llm-judge"   if dyn_judge   else "") + "\n")
 
-        attacker = AttackerLLM(model=attacker_model, endpoint=attacker_endpoint)
+        attacker = AttackerLLM(model=attacker_model, endpoint=attacker_endpoint,
+                               models=ensemble_attackers or None)
         available, ping_msg = attacker.is_model_available()
         if not available:
             print(f"  {C.RED('✗')} Attacker LLM unavailable: {ping_msg}")
@@ -3242,7 +3256,9 @@ def run_main_pipeline(args):
                 only_failed  = only_failed,
             )
 
-            print_dynamic_report(dyn_results, attacker_model)
+            attacker_label = (" → ".join(ensemble_attackers)
+                              if ensemble_attackers else attacker_model)
+            print_dynamic_report(dyn_results, attacker_label)
             if dyn_kb is not None and getattr(args, "kb_grow", False):
                 print(f"  {C.GREEN('◈ KB grew')}: +{drt.grown} winning attack(s) → "
                       f"{dyn_kb.count('attack_patterns')} patterns "
@@ -3253,7 +3269,7 @@ def run_main_pipeline(args):
                 ts      = datetime.now().strftime("%Y%m%d_%H%M%S")
                 dyn_path = os.path.join(args.output_dir, f"dynamic_{ts}.json")
                 save_dynamic_json(
-                    dyn_results, config, attacker_model, dyn_path,
+                    dyn_results, config, attacker_label, dyn_path,
                     anonymize=use_anonymize,
                 )
                 print(f"  Dynamic report → {C.CYAN(dyn_path)}\n")
