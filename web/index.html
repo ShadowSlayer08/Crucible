@@ -185,7 +185,53 @@ const el = (t, c, h) => { const e=document.createElement(t); if(c)e.className=c;
 const esc = (s) => String(s??"").replace(/[&<>"]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const state = { modes:[], pool:0 };
 
-async function api(path, opts){ const r = await fetch(path, opts); if(!r.ok){ let d; try{d=(await r.json()).detail}catch{} throw new Error(d||(r.status+" "+r.statusText)); } return r.json(); }
+// ── Auth (operator password → JWT, stored per-browser) ───────────────────────
+const TOKEN_KEY = "crucible_token";
+const getToken = () => { try{ return localStorage.getItem(TOKEN_KEY)||""; }catch{ return ""; } };
+const setToken = (t) => { try{ t ? localStorage.setItem(TOKEN_KEY,t) : localStorage.removeItem(TOKEN_KEY); }catch{} };
+const authHeaders = (extra) => { const h = Object.assign({}, extra||{}); const t=getToken(); if(t) h["Authorization"]="Bearer "+t; return h; };
+
+async function api(path, opts){
+  opts = opts||{}; opts.headers = authHeaders(opts.headers);
+  const r = await fetch(path, opts);
+  if(r.status===401){ setToken(""); showLogin("Session expired — sign in again."); throw new Error("unauthorized"); }
+  if(!r.ok){ let d; try{d=(await r.json()).detail}catch{} throw new Error(d||(r.status+" "+r.statusText)); }
+  return r.json();
+}
+
+async function doLogin(pw){
+  const r = await fetch("/auth/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({password:pw})});
+  if(!r.ok) throw new Error("invalid password");
+  const d = await r.json(); setToken(d.token||""); return d;
+}
+
+function showLogin(msg){
+  let o = document.getElementById("loginOverlay");
+  if(!o){
+    o = el("div"); o.id = "loginOverlay";
+    o.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;z-index:9999";
+    o.innerHTML = `<div style="background:#141821;border:1px solid #2a3140;border-radius:12px;padding:24px;width:320px;max-width:90vw;box-shadow:0 12px 40px rgba(0,0,0,.5)">
+      <div style="font-weight:700;font-size:16px;margin-bottom:4px">🔒 CRUCIBLE dashboard</div>
+      <div id="loginMsg" style="color:#8b91a3;font-size:12px;margin-bottom:14px">Enter the operator password.</div>
+      <input id="loginPw" type="password" placeholder="password" autocomplete="current-password"
+             style="width:100%;box-sizing:border-box;padding:9px 11px;border-radius:8px;border:1px solid #2a3140;background:#0e1116;color:#e6e6e6;margin-bottom:10px">
+      <button id="loginBtn" style="width:100%;padding:9px;border:0;border-radius:8px;background:#ff3355;color:#fff;font-weight:700;cursor:pointer">Sign in</button>
+    </div>`;
+    document.body.appendChild(o);
+    const submit = async () => {
+      const btn = document.getElementById("loginBtn");
+      btn.disabled = true; btn.textContent = "…";
+      try{ await doLogin(document.getElementById("loginPw").value); hideLogin(); boot(); }
+      catch(e){ document.getElementById("loginMsg").textContent = "Invalid password — try again."; btn.disabled=false; btn.textContent="Sign in"; }
+    };
+    o.querySelector("#loginBtn").onclick = submit;
+    o.querySelector("#loginPw").addEventListener("keydown", (ev) => { if(ev.key==="Enter") submit(); });
+  }
+  if(msg) document.getElementById("loginMsg").textContent = msg;
+  o.style.display = "flex";
+  const pw = document.getElementById("loginPw"); if(pw){ pw.value=""; pw.focus(); }
+}
+function hideLogin(){ const o = document.getElementById("loginOverlay"); if(o) o.style.display="none"; }
 
 async function boot(){
   try{
@@ -194,16 +240,18 @@ async function boot(){
     $("#pulse").classList.add("on"); $("#statusText").textContent = h.schemas+" schemas · "+h.modes+" modes";
   }catch(e){ $("#pulse").classList.add("err"); $("#statusText").textContent="server offline"; return; }
 
-  const [modes, schemas] = await Promise.all([api("/modes"), api("/schemas")]);
-  state.modes = modes.modes;
-  $("#modeCount").textContent = modes.count+" modes";
-  const msel = $("#mode");
-  modes.modes.forEach(m => msel.append(new Option(m.name+"  ("+m.test_count+")", m.name)));
-  const ssel = $("#schema");
-  schemas.schemas.forEach(s => ssel.append(new Option(s.name, s.name)));
-  ssel.value = [...ssel.options].some(o=>o.value==="openai") ? "openai" : ssel.options[0]?.value;
-  msel.value = "vapt";
-  msel.onchange = refreshPool; refreshPool();
+  try{
+    const [modes, schemas] = await Promise.all([api("/modes"), api("/schemas")]);
+    state.modes = modes.modes;
+    $("#modeCount").textContent = modes.count+" modes";
+    const msel = $("#mode");
+    modes.modes.forEach(m => msel.append(new Option(m.name+"  ("+m.test_count+")", m.name)));
+    const ssel = $("#schema");
+    schemas.schemas.forEach(s => ssel.append(new Option(s.name, s.name)));
+    ssel.value = [...ssel.options].some(o=>o.value==="openai") ? "openai" : ssel.options[0]?.value;
+    msel.value = "vapt";
+    msel.onchange = refreshPool; refreshPool();
+  }catch(e){ return; }   // 401 → api() already surfaced the login overlay
 }
 
 function selectedSeverities(){ return [...document.querySelectorAll(".chip.on")].map(c=>c.dataset.sev); }
@@ -272,7 +320,8 @@ async function liveRun(body){
   const tbody = $("#live");
   let done = null;
 
-  const resp = await fetch("/scan/stream", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const resp = await fetch("/scan/stream", {method:"POST", headers:authHeaders({"Content-Type":"application/json"}), body:JSON.stringify(body)});
+  if(resp.status===401){ setToken(""); showLogin("Session expired — sign in again."); throw new Error("unauthorized"); }
   if(!resp.ok){ let d; try{d=(await resp.json()).detail}catch{} throw new Error(d||("stream "+resp.status)); }
   const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf="";
   while(true){

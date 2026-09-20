@@ -27,6 +27,12 @@ Before any run against a third-party endpoint:
   (`.crucible-audit.jsonl`): operator, time, action, target host, mode, ROE ref.
 - Use `--anonymize` when sharing reports — it redacts the endpoint/key and **scrubs
   emails, SSNs, API-key-like secrets and phone numbers** from saved response bodies.
+- The `--serve` dashboard/API is **authenticated by default**: it refuses to start
+  without an operator password (`--serve-password` / `CRUCIBLE_SERVE_PASSWORD`), which
+  is exchanged at `POST /auth/login` for a short-lived HS256 JWT required (as
+  `Authorization: Bearer …`) on every route except `/health`, `/` and the login. Set
+  `CRUCIBLE_JWT_SECRET` to keep tokens valid across restarts. Still, only expose the
+  dashboard on a trusted network.
 
 ## What the tool does and does not do
 

@@ -26,14 +26,16 @@ module — and create_app() — work without it.
 """
 
 import json
+import os
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 import engine
 import classifier
+import serve_auth
 from payloads import VAPT_TESTS, REDTEAM_TESTS, EXPANDED_MODE_TESTS, enrich_test
 
 API_VERSION = "3.0"
@@ -225,7 +227,15 @@ def _run_live_scan(mode: str, tests: list, config: dict) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # APP FACTORY
 # ─────────────────────────────────────────────────────────────────────────────
-def create_app() -> FastAPI:
+def create_app(password: str = None, secret: str = None,
+               token_ttl: int = serve_auth.DEFAULT_TTL) -> FastAPI:
+    """Build the app. Auth is enforced ONLY when *password* is set: every route
+    except /health, / and /auth/login then requires a valid Bearer JWT. With no
+    password the app is open (embedded/library/test use) — the --serve entrypoint
+    always supplies one, so the shipped dashboard is always authenticated."""
+    if password:
+        secret = secret or serve_auth.new_secret()
+
     app = FastAPI(
         title="CRUCIBLE — AI Red Team REST API",
         version=API_VERSION,
@@ -235,6 +245,33 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
     )
+
+    _OPEN_PATHS = {"/health", "/", "/auth/login"}
+
+    if password:
+        @app.middleware("http")
+        async def _require_jwt(request: Request, call_next):
+            # CORS pre-flight (OPTIONS) must pass through unauthenticated.
+            if request.method != "OPTIONS" and request.url.path not in _OPEN_PATHS:
+                authz = request.headers.get("authorization", "")
+                token = authz[7:].strip() if authz[:7].lower() == "bearer " else ""
+                if serve_auth.verify_token(secret, token) is None:
+                    return JSONResponse({"detail": "unauthorized — POST /auth/login for a token"},
+                                        status_code=401)
+            return await call_next(request)
+
+    class LoginRequest(BaseModel):
+        password: str = Field(..., description="Operator password")
+
+    @app.post("/auth/login")
+    def login(req: LoginRequest) -> dict:
+        """Exchange the operator password for a short-lived Bearer JWT."""
+        if not password:
+            return {"auth": "disabled", "token": "", "token_type": "bearer", "expires_in": 0}
+        if not serve_auth.verify_password(password, req.password):
+            raise HTTPException(status_code=401, detail="invalid password")
+        return {"token": serve_auth.make_token(secret, ttl=token_ttl),
+                "token_type": "bearer", "expires_in": token_ttl}
 
     @app.get("/health")
     def health() -> dict:
@@ -375,13 +412,23 @@ def create_app() -> FastAPI:
 # ─────────────────────────────────────────────────────────────────────────────
 # ENTRYPOINT (uvicorn is optional — only needed to actually serve)
 # ─────────────────────────────────────────────────────────────────────────────
-def run(host: str = "127.0.0.1", port: int = 8000) -> None:
+def run(host: str = "127.0.0.1", port: int = 8000, password: str = None,
+        secret: str = None, token_ttl: int = serve_auth.DEFAULT_TTL) -> None:
     """Serve the app with uvicorn. Raises a clear error if it isn't installed.
 
-    The import is deliberately lazy: the module and create_app() must work
-    without uvicorn (e.g. under TestClient), and uvicorn is only an operational
-    dependency for the standalone server.
+    Auth is mandatory: a password must be supplied (arg or CRUCIBLE_SERVE_PASSWORD),
+    or run() refuses to start. The JWT signing secret comes from CRUCIBLE_JWT_SECRET
+    (persist it to keep tokens valid across restarts) or is generated per process.
+
+    The uvicorn import is deliberately lazy: the module and create_app() must work
+    without uvicorn (e.g. under TestClient).
     """
+    password = password or os.environ.get("CRUCIBLE_SERVE_PASSWORD")
+    if not password:
+        raise RuntimeError(
+            "--serve requires a password (auth is mandatory). Set --serve-password "
+            "or the CRUCIBLE_SERVE_PASSWORD environment variable.")
+    secret = secret or os.environ.get("CRUCIBLE_JWT_SECRET") or serve_auth.new_secret()
     try:
         import uvicorn
     except ImportError as exc:  # pragma: no cover - exercised only without uvicorn
@@ -389,7 +436,8 @@ def run(host: str = "127.0.0.1", port: int = 8000) -> None:
             "uvicorn is required to run the server. Install it with: "
             "pip install uvicorn"
         ) from exc
-    uvicorn.run(create_app(), host=host, port=port)
+    uvicorn.run(create_app(password=password, secret=secret, token_ttl=token_ttl),
+                host=host, port=port)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -265,4 +265,11 @@ def test_run_requires_uvicorn(monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     with pytest.raises(RuntimeError, match="uvicorn"):
+        server.run(password="pw")   # password supplied so we reach the uvicorn check
+
+
+def test_run_requires_password(monkeypatch):
+    """Auth is mandatory: run() with no password (and none in the env) refuses."""
+    monkeypatch.delenv("CRUCIBLE_SERVE_PASSWORD", raising=False)
+    with pytest.raises(RuntimeError, match="password"):
         server.run()

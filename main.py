@@ -120,6 +120,7 @@ import benchmarks
 import graders
 import benchmark_suites
 import completion
+import serve_auth
 
 ALL_TESTS       = VAPT_TESTS + REDTEAM_TESTS
 ALL_ATLAS_TESTS = VAPT_TESTS + REDTEAM_TESTS + ATLAS_NEW_TESTS
@@ -685,6 +686,16 @@ def build_parser():
                    help="Launch the FastAPI REST server + web dashboard, then exit")
     p.add_argument("--serve-host", default="127.0.0.1")
     p.add_argument("--serve-port", type=int, default=8000)
+    p.add_argument("--serve-password", metavar="PW",
+                   help="Operator password to obtain a dashboard token (or set "
+                        "CRUCIBLE_SERVE_PASSWORD). Auth is mandatory — --serve refuses "
+                        "to start without it.")
+    p.add_argument("--serve-secret", metavar="KEY",
+                   help="JWT signing secret (or CRUCIBLE_JWT_SECRET). Persist it to keep "
+                        "issued tokens valid across restarts; else a random per-process one.")
+    p.add_argument("--serve-token-ttl", type=int, default=serve_auth.DEFAULT_TTL,
+                   metavar="SECONDS",
+                   help=f"Dashboard token lifetime in seconds (default {serve_auth.DEFAULT_TTL})")
 
     # ── Browser mode (--schema browser) ───────────────────────────────────────
     p.add_argument("--browser-url", metavar="URL",
@@ -2247,7 +2258,10 @@ def _dispatch(args) -> 'int | None':
             import server
             print(f"  {C.CYAN('◈ REST server')} → http://{args.serve_host}:{args.serve_port}  "
                   f"{C.DIM('(dashboard at / , Ctrl+C to stop)')}\n")
-            server.run(host=args.serve_host, port=args.serve_port)
+            server.run(host=args.serve_host, port=args.serve_port,
+                       password=getattr(args, "serve_password", None),
+                       secret=getattr(args, "serve_secret", None),
+                       token_ttl=getattr(args, "serve_token_ttl", serve_auth.DEFAULT_TTL))
         except RuntimeError as e:
             print(f"  {C.RED('Cannot start server:')} {e}\n")
             return 1
