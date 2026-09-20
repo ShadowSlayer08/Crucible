@@ -1,0 +1,60 @@
+site_name: CRUCIBLE
+site_description: >-
+  Trial by fire for AI — black-box offensive testing that hunts, adapts, and
+  proves the failure modes your LLM ships with.
+repo_url: https://github.com/ShadowSlayer08/Crucible
+repo_name: ShadowSlayer08/Crucible
+docs_dir: docs
+copyright: Authorized red-teaming for the age of LLMs — authorized testing only.
+
+theme:
+  name: material
+  logo: assets/crucible-mark.svg
+  favicon: assets/crucible-mark.svg
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: red
+      accent: red
+      toggle:
+        icon: material/weather-night
+        name: Switch to light
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: red
+      accent: red
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - content.code.copy
+    - search.suggest
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Attack modes: attack-modes.md
+  - Adaptive & judging: adaptive-and-judging.md
+  - Safety & serving: safety-and-serving.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.details
+  - tables
+
+# docs/ also holds legacy business binaries + diagrams — keep them out of the site.
+exclude_docs: |
+  *.docx
+  *.xlsx
+  *.mmd
+  build/
