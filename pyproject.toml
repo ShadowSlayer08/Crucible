@@ -38,7 +38,7 @@ cru = "main:main"
 [tool.setuptools]
 py-modules = [
     "agenthound", "audit",
-    "atlas_reporter", "auto", "benchmarks", "budget", "capability_profiler",
+    "atlas_reporter", "auto", "benchmarks", "benchmark_suites", "budget", "capability_profiler",
     "checkpoint", "classifier", "classifier_eval", "colors", "compliance", "corpus",
     "config_loader", "coverage_report", "crescendo", "declarative", "defence_audit", "discover",
     "dynamic_engine", "embeddings", "engine", "engine_browser", "extraction", "fullstack",

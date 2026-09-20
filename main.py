@@ -118,6 +118,7 @@ import transferability as transferability_mod
 import threat_ontology
 import benchmarks
 import graders
+import benchmark_suites
 
 ALL_TESTS       = VAPT_TESTS + REDTEAM_TESTS
 ALL_ATLAS_TESTS = VAPT_TESTS + REDTEAM_TESTS + ATLAS_NEW_TESTS
@@ -532,6 +533,16 @@ def build_parser():
     p.add_argument("--grader-judge", action="store_true",
                    help="Grade with the attacker LLM (--attacker-endpoint/--attacker-model) "
                         "applying each rubric's judge prompt, instead of the offline heuristic")
+    p.add_argument("--benchmark-suite", choices=["harmbench", "jailbreakbench", "strongreject"],
+                   metavar="SUITE",
+                   help="Run a published benchmark's prompt SET and auto-score it with the "
+                        "matching rubric grader — one command for a published-number comparison. "
+                        "Uses a bundled abstract sample unless --benchmark-file is given.")
+    p.add_argument("--benchmark-file", metavar="PATH",
+                   help="Load the real benchmark dataset for --benchmark-suite from PATH "
+                        "(CSV/TSV/JSONL via the corpus loader) instead of the bundled sample.")
+    p.add_argument("--benchmark-limit", type=int, metavar="N",
+                   help="Cap the number of --benchmark-suite prompts to N")
     p.add_argument("--recommend", action="store_true",
                    help="After the run, print defensive 'teaching prompt' recommendations "
                         "to harden the target against the failure classes observed")
@@ -2571,7 +2582,8 @@ def run_main_pipeline(args):
     if not args.mode and not args.resume \
             and not getattr(args, "compare", False) \
             and not getattr(args, "retry_failed", False) \
-            and not getattr(args, "vuln", None):
+            and not getattr(args, "vuln", None) \
+            and not getattr(args, "benchmark_suite", None):
         print(f"  {C.RED('Error')}: --mode required. "
               f"Choose: vapt | redteam | payload | mcp | agentic | rag | "
               f"swarm | policy | benign | obfuscation  "
@@ -2612,7 +2624,31 @@ def run_main_pipeline(args):
         return 0
 
     # ── Build base test pool ──────────────────────────────────────────────────
-    if getattr(args, "vuln", None):
+    if getattr(args, "benchmark_suite", None):
+        # Run a published benchmark's prompt set + auto-score with its rubric grader.
+        bs     = benchmark_suites.canonical(args.benchmark_suite)
+        bfile  = getattr(args, "benchmark_file", None)
+        blimit = getattr(args, "benchmark_limit", None)
+        try:
+            if bfile:
+                base_tests = benchmark_suites.load_from_file(bs, bfile, limit=blimit)
+                src = f"file:{bfile}"
+            else:
+                base_tests = benchmark_suites.load_suite(bs, limit=blimit)
+                src = "bundled sample"
+        except (ValueError, FileNotFoundError) as e:
+            print(f"  {C.RED('Error')}: {e}\n")
+            return 1
+        if not base_tests:
+            print(f"  {C.RED('Error')}: benchmark suite '{bs}' produced no prompts "
+                  f"({src}).\n")
+            return 1
+        # Auto-apply the matching rubric grader unless the user chose one explicitly.
+        if not getattr(args, "grader", None):
+            args.grader = benchmark_suites.GRADER_FOR[bs]
+        print(f"  {C.CYAN('◈ BENCHMARK SUITE')} [{bs}]: {len(base_tests)} prompt(s) "
+              f"{C.DIM('(' + src + ')')} → grader={C.BOLD(args.grader)}")
+    elif getattr(args, "vuln", None):
         # Declarative Vuln × Attack composition (roadmap G6)
         _vulns   = [v.strip() for v in args.vuln.split(",") if v.strip()]
         _attacks = [a.strip() for a in args.attack.split(",")] if getattr(args, "attack", None) else []
