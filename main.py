@@ -578,6 +578,11 @@ def build_parser():
                    help="Route the LLM judge to the local Ollama daemon (free, no rate limits)")
     p.add_argument("--judge-local-model", metavar="MODEL",
                    help="Local judge model for --judge-local (default: auto-pick an available Ollama model)")
+    p.add_argument("--cross-judge", nargs="?", const="auto", metavar="MODEL",
+                   help="Cut self-scoring bias: judge with a local model that is DIFFERENT "
+                        "from the attacker. Bare --cross-judge auto-picks a distinct pulled "
+                        "Ollama chat model; --cross-judge MODEL pins one. Enables the local "
+                        "judge for --dynamic and --grader-judge alike.")
 
     # ── Phase 6B — self-growing knowledge base ────────────────────────────────
     p.add_argument("--kb-dir", metavar="DIR", default=kb_mod.DEFAULT_DIR,
@@ -1191,6 +1196,40 @@ def _apply_local_attacker(args) -> None:
     print(f"  {C.CYAN('◈ LOCAL ATTACKER')}  —  "
           f"{C.BOLD(getattr(args, 'attacker_model', 'kimi-k2'))} @ {args.attacker_endpoint}  "
           f"{C.DIM('(--dynamic on)')}")
+
+
+def _apply_cross_judge(args) -> None:
+    """--cross-judge (roadmap H2): judge with an INDEPENDENT local model, different
+    from the attacker, to cut self-scoring bias. Enables the local judge and, unless
+    a model is named, auto-picks a pulled chat model whose base differs from the
+    attacker's. Mutates args in place before any config is built."""
+    cj = getattr(args, "cross_judge", None)
+    if cj in (None, False):
+        return
+    args.judge_local = True
+    attacker_model = getattr(args, "attacker_model", "") or ""
+    endpoint = getattr(args, "attacker_endpoint", None) or local_engine.DEFAULT_HOST
+
+    if isinstance(cj, str) and cj not in ("", "auto"):
+        args.judge_local_model = cj
+    elif not getattr(args, "judge_local_model", None):
+        base = attacker_model.split(":")[0].lower()
+        chosen = None
+        eng = local_engine.LocalLLMEngine(host=endpoint)
+        if eng.is_available():
+            for m in eng.chat_models():
+                if m.split(":")[0].lower() != base:
+                    chosen = m
+                    break
+        args.judge_local_model = chosen
+        if chosen is None:
+            print(f"  {C.YELLOW('⚠ cross-judge:')} no local chat model distinct from the "
+                  f"attacker ({attacker_model or 'default'}) — judge may not be independent. "
+                  f"Pull a second model or pass --cross-judge MODEL.")
+
+    judge_model = getattr(args, "judge_local_model", None) or "auto-pick"
+    print(f"  {C.CYAN('◈ CROSS-JUDGE')}  —  judge={C.BOLD(judge_model)} "
+          f"{C.DIM('(independent of attacker ' + (attacker_model or 'default') + ')')}")
 
 
 def _open_kb(args, seed_if_empty: bool = True):
@@ -1948,6 +1987,7 @@ def run(args):
     # ── --local / --offline: normalise to the local Ollama daemon (air-gap) ───
     _apply_local(args)
     _apply_local_attacker(args)   # --local-attacker: one-flag local attacker preset
+    _apply_cross_judge(args)      # --cross-judge: independent local judge (H2)
 
     # ── --rps / --delay: client-side pacing (applies to every path, incl. --extract) ─
     if getattr(args, "rps", None) or getattr(args, "delay", None):
