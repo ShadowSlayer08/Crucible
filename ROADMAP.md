@@ -72,7 +72,7 @@ target is remote; all-local runs are free.
 | ID | Task | Effort | Status |
 |----|------|--------|--------|
 | D1 | Ollama preflight: ping `/api/tags`, verify model tag exists, friendly error if down — `local_engine.is_available`/`pick_model` under `--local`/`--offline` | S | ✅ |
-| D2 | `--local-attacker` one-flag alias (capability exists via `--dynamic --attacker-endpoint … --attacker-model …`; the *alias* is the only gap) | S | ✗ |
+| D2 | `--local-attacker` one-flag preset — `_apply_local_attacker` turns on `--dynamic`, points the attacker at local Ollama, auto-picks an uncensored pulled model | S | ✅ |
 | D3 | Local-judge convenience — shipped as `--judge-local` / `--judge-local-model` (different flag name than spec'd) | S | ✅ |
 | D4 | `--profile slm` / `--profile llm` presets bundling mode set + `--samples` — `profile_presets.py` (see also H6) | M | ✅ |
 | D5 | Long-context routing: when target context ≥ 32K (the 27B is 256K), auto-enable `--mode rag-long --context-tokens 32000` | S | ✗ |
@@ -195,12 +195,20 @@ python main.py --mode redteam --owasp --nist --coverage \
 
 | ID | Task | Effort | Status |
 |----|------|--------|--------|
-| H1 | `--local-attacker` / `--local-judge` presets pinned to the cybersec-27B | S | ✗ |
-| H2 | **Cross-judge**: attacker = 27B, judge = supergemma-26B (independent model → less self-scoring bias) via existing `--judge-*` flags | S | ✗ (works today, make it a preset) |
-| H3 | **Ensemble attacker**: rotate attacker model per `--dynamic` round (27B ↔ 26B) for mutation diversity | M | ✗ |
+| H1 | `--local-attacker` preset (D2) shipped; local-judge via `--judge-local` / `--cross-judge` | S | ✅ |
+| H2 | **Cross-judge**: `--cross-judge [MODEL]` judges with a local model whose base tag differs from the attacker → less self-scoring bias, for `--dynamic` and `--grader-judge` (`_apply_cross_judge`) | S | ✅ |
+| H3 | **Ensemble attacker**: `--ensemble-attackers m1,m2,…` rotates the generating model per `--dynamic` round (`AttackerLLM.rotate` + `_rotate_attacker`) for mutation diversity | M | ✅ |
 | H4 | `bge-m3` embeddings backend for real DBSCAN diversity (#37) + semantic dedup of FAIL payloads | M | ✅ |
 | H5 | `bge-m3`-driven RAG/vector-store poisoning — `--vector-poison`: in-memory retriever, poison docs vs benign queries, retrieval-hijack rate (OWASP LLM08) | M | ✅ |
 | H6 | `--profile slm\|llm` auto-routing — mode set + default `--samples`; drops modes the capability probe rejects | M | ✅ |
+
+## Stage J — Benchmark comparability & coverage  *(net-new 2026-09, beyond the original roadmap)*  ✅
+
+| ID | Task | Status |
+|----|------|--------|
+| J1 | **Adaptive-driver tests** — `tests/test_mutate_bandit_suite.py` covers `run_mutate_suite` / `run_bandit_session` (were wired but untested) | ✅ |
+| J2 | **Benchmark graders** — `graders.py` + `--grader harmbench\|jailbreakbench\|strongreject\|all` (+`--grader-judge`): faithful HarmBench / JailbreakBench / StrongREJECT rubrics + parsers, LLM-judge path with an offline heuristic fallback, rubric-ASR panel with a published-baseline delta | ✅ |
+| J3 | **Benchmark-suite runner** — `benchmark_suites.py` + `--benchmark-suite <name>` (`--benchmark-file` / `--benchmark-limit`): runs a benchmark's prompt SET and auto-scores with the matching grader | ✅ |
 
 ## Suggested sequencing
 
