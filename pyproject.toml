@@ -47,7 +47,7 @@ py-modules = [
     "multiturn", "nist", "notify", "obfuscation_wrapper", "owasp", "owasp_agentic",
     "remediation",
     "payload_audit", "payload_loader", "plugins", "policy_gen", "profile_presets",
-    "reporter", "roe", "sampling", "scope_wizard", "server", "stats", "tap",
+    "reporter", "roe", "sampling", "scope_wizard", "serve_auth", "server", "stats", "tap",
     "threat_ontology", "transferability", "trend", "vector_poison",
 ]
 
