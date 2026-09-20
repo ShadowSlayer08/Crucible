@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getHealth, getModes, getSchemas, dryRun, streamScan } from "./api.js";
+import { getHealth, getModes, getSchemas, dryRun, streamScan, login, logout, hasToken, AuthError } from "./api.js";
 
 const SEVERITIES = ["Critical", "High", "Medium", "Low"];
 const VERDICT_ORDER = ["FAIL", "WARN", "PARTIAL_REFUSAL", "SILENT", "PASS", "ERROR"];
@@ -26,14 +26,19 @@ export default function App() {
   const [rows, setRows] = useState([]);
   const [summary, setSummary] = useState(null);
   const [dry, setDry] = useState(null);
+  const [needAuth, setNeedAuth] = useState(false);
+
+  async function loadMeta() {
+    const [m, s] = await Promise.all([getModes(), getSchemas()]);
+    setModes(m.modes); setSchemas(s.schemas);
+  }
 
   useEffect(() => {
     (async () => {
-      try {
-        setHealth(await getHealth());
-        const [m, s] = await Promise.all([getModes(), getSchemas()]);
-        setModes(m.modes); setSchemas(s.schemas);
-      } catch { setOffline(true); }
+      try { setHealth(await getHealth()); }
+      catch { setOffline(true); return; }
+      try { await loadMeta(); }
+      catch (e) { if (e instanceof AuthError) setNeedAuth(true); else setOffline(true); }
     })();
   }, []);
 
@@ -79,7 +84,8 @@ export default function App() {
         }
       }
     } catch (e) {
-      setMsg({ kind: "err", text: "✗ " + e.message });
+      if (e instanceof AuthError) setNeedAuth(true);
+      else setMsg({ kind: "err", text: "✗ " + e.message });
     } finally {
       setBusy(false);
     }
@@ -87,12 +93,19 @@ export default function App() {
 
   return (
     <>
+      {needAuth && (
+        <Login onAuthed={async () => { setNeedAuth(false); try { await loadMeta(); } catch { /* ignore */ } }} />
+      )}
       <header>
         <h1>AI Red Team<span className="dot"> ●</span> CLI</h1>
         <span className="ver">{health ? "v" + health.version : "v—"}</span>
         <div className="status">
           <span className={"pulse " + (offline ? "err" : health ? "on" : "")} />
           {offline ? "server offline" : health ? `${health.schemas} schemas · ${health.modes} modes` : "connecting…"}
+          {hasToken() && (
+            <a style={{ marginLeft: 10, cursor: "pointer", opacity: 0.7 }}
+               onClick={() => { logout(); setNeedAuth(true); }}>sign out</a>
+          )}
         </div>
       </header>
 
@@ -251,6 +264,37 @@ function ResultsTable({ rows }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function Login({ onAuthed }) {
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e?.preventDefault();
+    setBusy(true); setErr("");
+    try { await login(pw); onAuthed(); }
+    catch { setErr("Invalid password — try again."); setBusy(false); }
+  };
+  const overlay = {
+    position: "fixed", inset: 0, background: "rgba(0,0,0,.72)",
+    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999,
+  };
+  const card = {
+    background: "var(--panel, #141821)", border: "1px solid var(--border, #2a3140)",
+    borderRadius: 12, padding: 24, width: 320, maxWidth: "90vw",
+    boxShadow: "0 12px 40px rgba(0,0,0,.5)", display: "flex", flexDirection: "column", gap: 10,
+  };
+  return (
+    <div style={overlay}>
+      <form style={card} onSubmit={submit}>
+        <div style={{ fontWeight: 700, fontSize: 16 }}>🔒 CRUCIBLE dashboard</div>
+        <div className="muted" style={{ fontSize: 12 }}>{err || "Enter the operator password."}</div>
+        <input type="password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} placeholder="password" />
+        <button className="primary" disabled={busy} type="submit">{busy ? "…" : "Sign in"}</button>
+      </form>
     </div>
   );
 }
