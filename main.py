@@ -119,6 +119,7 @@ import threat_ontology
 import benchmarks
 import graders
 import benchmark_suites
+import completion
 
 ALL_TESTS       = VAPT_TESTS + REDTEAM_TESTS
 ALL_ATLAS_TESTS = VAPT_TESTS + REDTEAM_TESTS + ATLAS_NEW_TESTS
@@ -483,6 +484,9 @@ def build_parser():
     )
     p.add_argument("--version", action="version", version=f"crucible {__version__}",
                    help="Print the CRUCIBLE version and exit")
+    p.add_argument("--completion", choices=list(completion.SHELLS), metavar="SHELL",
+                   help="Print a shell completion script (bash | zsh | fish) and exit. "
+                        "E.g.  crucible --completion bash >> ~/.bashrc")
 
     # mode + target
     p.add_argument("--mode", choices=[
@@ -2040,6 +2044,10 @@ def _dispatch(args) -> 'int | None':
     sits between the target-book handlers and the schema/list handlers). A block
     that handles the invocation returns its exit code; if none match, returns None
     so run() falls through to run_main_pipeline()."""
+    if getattr(args, "completion", None):
+        # Print the shell completion script to stdout and exit (no config needed).
+        print(completion.render(args.completion, build_parser()), end="")
+        return 0
     if getattr(args, "kb_reset", False):
         kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
         kb.reset()
