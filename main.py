@@ -624,6 +624,14 @@ def build_parser():
                    help="Semantic search the KB attack corpus, then exit")
     p.add_argument("--kb-reset", action="store_true",
                    help="Wipe the knowledge base, then exit")
+    p.add_argument("--kb-prune", action="store_true",
+                   help="Prune grown (dynamic-win) KB patterns that are stale and/or "
+                        "low-value, then exit. Static seeds are never pruned. Combine "
+                        "with --kb-prune-max-age-days and/or --kb-prune-min-success.")
+    p.add_argument("--kb-prune-max-age-days", type=float, metavar="N",
+                   help="With --kb-prune: prune grown patterns older than N days")
+    p.add_argument("--kb-prune-min-success", type=int, metavar="K",
+                   help="With --kb-prune: prune grown patterns with success_count < K")
     p.add_argument("--slm-collect", action="store_true",
                    help="Snapshot the KB's winning attacks into SLM training data (JSONL), then exit")
 
@@ -2086,7 +2094,29 @@ def _dispatch(args) -> 'int | None':
               f"{'semantic' if st['semantic'] else 'lexical'}")
         for c, n in sorted(st["collections"].items()):
             print(f"    {c:<16}: {n}")
+        q = kb.quality_report("attack_patterns")
+        if q["dynamic_wins"]:
+            print(f"    {C.DIM('grown wins')}      : {q['dynamic_wins']}  "
+                  f"({q['reinforced']} reinforced · avg success {q['avg_success']} · "
+                  f"{q['stale_over_30d']} stale >30d)")
         print()
+        return 0
+    if getattr(args, "kb_prune", False):
+        kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
+        max_age = getattr(args, "kb_prune_max_age_days", None)
+        min_suc = getattr(args, "kb_prune_min_success", None)
+        if max_age is None and min_suc is None:
+            print(f"\n  {C.YELLOW('◈ KB PRUNE')}: no criteria — pass "
+                  f"--kb-prune-max-age-days and/or --kb-prune-min-success.\n")
+            return 2
+        res = kb.prune("attack_patterns", max_age_days=max_age, min_success=min_suc)
+        crit = []
+        if max_age is not None:
+            crit.append(f">{max_age}d old")
+        if min_suc is not None:
+            crit.append(f"success<{min_suc}")
+        print(f"\n  {C.BOLD('◈ KB PRUNE')} ({' & '.join(crit)}): removed "
+              f"{C.RED(str(res['pruned']))} grown pattern(s), {res['kept']} kept.\n")
         return 0
     if getattr(args, "kb_search", None):
         kb = kb_mod.RedTeamKB(persist_dir=args.kb_dir)
@@ -3422,7 +3452,8 @@ def run_main_pipeline(args):
                               if ensemble_attackers else attacker_model)
             print_dynamic_report(dyn_results, attacker_label)
             if dyn_kb is not None and getattr(args, "kb_grow", False):
-                print(f"  {C.GREEN('◈ KB grew')}: +{drt.grown} winning attack(s) → "
+                print(f"  {C.GREEN('◈ KB grew')}: +{drt.grown} new winning attack(s), "
+                      f"{drt.reinforced} reinforced → "
                       f"{dyn_kb.count('attack_patterns')} patterns "
                       f"{C.DIM('(the corpus compounds each run)')}")
 

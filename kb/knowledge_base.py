@@ -28,6 +28,7 @@ import json
 import math
 import os
 import re
+import time
 import sqlite3
 
 DEFAULT_DIR = os.environ.get("CRUCIBLE_KB_DIR", ".crucible-kb")
@@ -201,6 +202,92 @@ class RedTeamKB:
             "DELETE FROM documents WHERE collection=? AND doc_id=?", (collection, doc_id))
         self._conn.commit()
         return cur.rowcount > 0
+
+    # ── quality management ──────────────────────────────────────────────────────
+    def get(self, collection: str, doc_id: str):
+        """Return one doc as {doc_id, text, metadata}, or None if absent."""
+        row = self._conn.execute(
+            "SELECT doc_id, text, metadata FROM documents "
+            "WHERE collection=? AND doc_id=?", (collection, doc_id)).fetchone()
+        if not row:
+            return None
+        return {"doc_id": row[0], "text": row[1], "metadata": json.loads(row[2] or "{}")}
+
+    def record_success(self, doc_id: str, collection: str = "attack_patterns",
+                       now: float = None):
+        """Reinforce a stored win: bump its ``success_count`` and stamp ``last_used``.
+        Returns the new success_count, or None if the doc no longer exists."""
+        doc = self.get(collection, doc_id)
+        if doc is None:
+            return None
+        meta = doc["metadata"]
+        meta["success_count"] = int(meta.get("success_count", 0)) + 1
+        meta["last_used"] = float(now if now is not None else time.time())
+        self._conn.execute(
+            "UPDATE documents SET metadata=? WHERE collection=? AND doc_id=?",
+            (json.dumps(meta), collection, doc_id))
+        self._conn.commit()
+        return meta["success_count"]
+
+    def prune(self, collection: str = "attack_patterns", *,
+              max_age_days: float = None, min_success: int = None,
+              now: float = None) -> dict:
+        """Remove GROWN (``origin == 'dynamic-win'``) patterns that are stale and/or
+        weak. Static seeds (any other origin) are never pruned, and a grown doc missing
+        ``created_at`` is never pruned on the age criterion. When both criteria are
+        given a doc must be BOTH stale AND weak to go; with one, that one decides; with
+        neither, nothing is pruned. Returns {'pruned', 'kept', 'removed': [doc_id,...]}."""
+        if max_age_days is None and min_success is None:
+            return {"pruned": 0, "kept": self.count(collection), "removed": []}
+        now = float(now if now is not None else time.time())
+        removed = []
+        for _c, did, _text, meta_json, _e in self._rows(collection):
+            meta = json.loads(meta_json or "{}")
+            if str(meta.get("origin", "")) != "dynamic-win":
+                continue                                   # only grown patterns prunable
+            created = meta.get("created_at")
+            age_days = ((now - float(created)) / 86400.0) if created is not None else None
+            stale = (max_age_days is not None and age_days is not None
+                     and age_days > max_age_days)
+            weak = (min_success is not None
+                    and int(meta.get("success_count", 0)) < min_success)
+            if max_age_days is not None and min_success is not None:
+                doomed = stale and weak
+            elif max_age_days is not None:
+                doomed = stale
+            else:
+                doomed = weak
+            if doomed:
+                removed.append(did)
+        for did in removed:
+            self.delete(collection, did)
+        return {"pruned": len(removed), "kept": self.count(collection), "removed": removed}
+
+    def quality_report(self, collection: str = "attack_patterns",
+                       now: float = None) -> dict:
+        """A snapshot of KB health: origin mix, grown-win reinforcement, staleness."""
+        now = float(now if now is not None else time.time())
+        wins, by_origin = [], {}
+        for _c, did, _text, meta_json, _e in self._rows(collection):
+            meta = json.loads(meta_json or "{}")
+            origin = str(meta.get("origin", "seed"))
+            by_origin[origin] = by_origin.get(origin, 0) + 1
+            if origin == "dynamic-win":
+                wins.append((did, int(meta.get("success_count", 0)),
+                             meta.get("category", ""), meta.get("created_at")))
+        n = len(wins)
+        top = sorted(wins, key=lambda w: w[1], reverse=True)[:5]
+        return {
+            "collection":     collection,
+            "total":          self.count(collection),
+            "by_origin":      by_origin,
+            "dynamic_wins":   n,
+            "reinforced":     sum(1 for w in wins if w[1] > 1),
+            "avg_success":    round(sum(w[1] for w in wins) / n, 2) if n else 0.0,
+            "stale_over_30d": sum(1 for w in wins
+                                  if w[3] is not None and (now - float(w[3])) / 86400 > 30),
+            "top": [{"doc_id": w[0], "success_count": w[1], "category": w[2]} for w in top],
+        }
 
     def reset(self) -> None:
         self._conn.execute("DELETE FROM documents")
