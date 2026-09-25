@@ -269,6 +269,11 @@ MODE_DESCRIPTIONS = {
         "desc":  "Fabricated compliant dialogue at escalating shot counts (4/8/16/32) — the shot-count→ASR curve.",
         "tests": EXPANDED_MODE_TESTS["many-shot"],
     },
+    "artprompt": {
+        "label": "ArtPrompt Mode  (ASCII-art keyword masking)",
+        "desc":  "Hides the trigger word as ASCII art so the safety filter never sees it; the model decodes it and complies.",
+        "tests": EXPANDED_MODE_TESTS["artprompt"],
+    },
 }
 
 
@@ -495,7 +500,7 @@ def build_parser():
         "mcp", "agentic", "rag", "swarm", "policy", "benign", "obfuscation",
         "multilingual", "multimodal", "memory-poison", "pismith",
         "rag-long", "defence-audit", "authz", "audio", "video", "harm",
-        "model-theft", "modern-jailbreak", "many-shot",
+        "model-theft", "modern-jailbreak", "many-shot", "artprompt",
     ])
     # ── Declarative Vuln × Attack composition (roadmap G6) ────────────────────
     p.add_argument("--vuln", metavar="A,B",
