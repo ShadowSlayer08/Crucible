@@ -1157,17 +1157,10 @@ class MutateRunResult:
         }
 
 
-# Names used in reports and JSON output — must stay stable.
-_MUTATOR_NAMES = [
-    "fictional_frame",
-    "academic_frame",
-    "base64_encode",
-    "hypothetical_frame",
-    "roleplay_frame",
-    "split_obfuscate",
-    "authority_frame",
-    "rot13_encode",
-]
+# _MUTATOR_NAMES (the report/JSON column order) is derived from all_mutations()
+# just after the PayloadMutator class — see mutator_method_names() below. It used to
+# be a hardcoded list of only the first 8, which silently dropped the other 8
+# mutators from the mutate report and its JSON.
 
 
 class PayloadMutator:
@@ -1401,6 +1394,18 @@ class PayloadMutator:
         ]
 
 
+def mutator_method_names(payload: str = "seed") -> list:
+    """Canonical mutator-method-name order — the ``method_name`` of every mutation
+    ``PayloadMutator.all_mutations()`` produces, in order. Deriving the report/JSON
+    columns from this (instead of a hand-maintained list) keeps them from ever
+    drifting out of sync with the mutations actually fired."""
+    return [m.method_name for m in PayloadMutator().all_mutations(payload)]
+
+
+# Names used in the mutate report + JSON output — single source of truth.
+_MUTATOR_NAMES = mutator_method_names()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # MUTATE SUITE RUNNER
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1410,8 +1415,8 @@ def run_mutate_suite(
     target_config: dict,
 ) -> list[MutateRunResult]:
     """
-    For every FAIL test in *fail_results*, generate all 8 PayloadMutator
-    variants and fire each at the target.
+    For every FAIL test in *fail_results*, generate all PayloadMutator
+    variants (see all_mutations) and fire each at the target.
 
     Parameters
     ----------
