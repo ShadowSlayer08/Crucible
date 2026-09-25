@@ -825,6 +825,7 @@ class DynamicRedTeamer:
         self.kb_grow       = kb_grow and kb is not None
         self.grow_threshold = grow_threshold
         self.grown         = 0   # count of winning attacks written back to the KB
+        self.reinforced    = 0   # count of repeat wins that reinforced an existing entry
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
@@ -954,14 +955,24 @@ class DynamicRedTeamer:
                 # ── Grow: write high-confidence winners back into the KB ──────
                 if self.kb_grow and confidence >= self.grow_threshold:
                     try:
-                        if not self.kb.has_similar(winning_payload, threshold=0.95):
+                        dup = self.kb.query("attack_patterns", winning_payload, n=1)
+                        if dup and dup[0]["score"] >= 0.95:
+                            # A repeat of a known win — reinforce it (bump success_count)
+                            # instead of dropping the near-duplicate on the floor.
+                            self.kb.record_success(dup[0]["doc_id"])
+                            self.reinforced += 1
+                        else:
+                            ts = time.time()
                             self.kb.add("attack_patterns", winning_payload, metadata={
-                                "origin":       "dynamic-win",
-                                "category":     category,
-                                "confidence":   round(confidence, 2),
-                                "seed_id":      base_test.get("id", ""),
-                                "target_model": self.target_config.get("model", ""),
-                                "strategy":     winning_strategy,
+                                "origin":        "dynamic-win",
+                                "category":      category,
+                                "confidence":    round(confidence, 2),
+                                "seed_id":       base_test.get("id", ""),
+                                "target_model":  self.target_config.get("model", ""),
+                                "strategy":      winning_strategy,
+                                "success_count": 1,
+                                "created_at":    ts,
+                                "last_used":     ts,
                             })
                             self.grown += 1
                     except Exception:
