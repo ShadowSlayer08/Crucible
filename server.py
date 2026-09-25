@@ -83,6 +83,7 @@ MODE_LABELS = {
     "model-theft": "Model Theft — extraction / inversion / membership",
     "modern-jailbreak": "Modern Jailbreak — Policy Puppetry / Skeleton Key / Deceptive Delight",
     "many-shot": "Many-Shot — long-context in-context-learning bypass",
+    "artprompt": "ArtPrompt — ASCII-art keyword masking",
 }
 
 
