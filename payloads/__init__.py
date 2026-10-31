@@ -28,6 +28,7 @@ from .harm_taxonomy import HARM_TAXONOMY_TESTS
 from .model_stealing import MODEL_STEALING_TESTS
 from .modern_jailbreaks import MODERN_JAILBREAK_TESTS
 from .many_shot import MANY_SHOT_TESTS, build_many_shot
+from .artprompt import ARTPROMPT_TESTS, render_word, build_artprompt
 
 # Maps a --mode name to its static test pool, for the modes that simply run a
 # dedicated suite through the standard pipeline.
@@ -50,6 +51,7 @@ EXPANDED_MODE_TESTS = {
     "model-theft":  MODEL_STEALING_TESTS,
     "modern-jailbreak": MODERN_JAILBREAK_TESTS,
     "many-shot":    MANY_SHOT_TESTS,
+    "artprompt":    ARTPROMPT_TESTS,
 }
 
 __all__ = [
@@ -64,6 +66,7 @@ __all__ = [
     "MEMORY_POISON_TESTS", "PISMITH_TESTS", "AUTHZ_TESTS",
     "AUDIO_TESTS", "VIDEO_TESTS", "HARM_TAXONOMY_TESTS", "MODEL_STEALING_TESTS",
     "MODERN_JAILBREAK_TESTS", "MANY_SHOT_TESTS", "build_many_shot",
+    "ARTPROMPT_TESTS", "render_word", "build_artprompt",
     "available_languages", "filter_by_language",
     "EXPANDED_MODE_TESTS",
 ]

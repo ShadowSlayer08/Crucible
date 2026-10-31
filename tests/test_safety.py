@@ -191,7 +191,10 @@ def test_throttle_noop_when_unlimited():
     t0 = time.monotonic()
     for _ in range(5):
         engine._throttle()
-    assert time.monotonic() - t0 < 0.01
+    # No rate set → no sleeping. A real throttle at any set rate would sleep for
+    # whole seconds; 0.1s is a loose ceiling that still proves the no-op path while
+    # tolerating scheduler jitter under full-suite CPU load (was a flaky 0.01s).
+    assert time.monotonic() - t0 < 0.1
 
 
 def test_set_rate_delay_wins_when_larger():

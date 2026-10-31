@@ -38,7 +38,7 @@ import classifier
 import serve_auth
 from payloads import VAPT_TESTS, REDTEAM_TESTS, EXPANDED_MODE_TESTS, enrich_test
 
-API_VERSION = "3.0"
+API_VERSION = "3.1"
 
 # ── Static fields exposed per test (avoid leaking internal/private keys) ───────
 _TEST_PUBLIC_FIELDS = (
@@ -83,6 +83,7 @@ MODE_LABELS = {
     "model-theft": "Model Theft — extraction / inversion / membership",
     "modern-jailbreak": "Modern Jailbreak — Policy Puppetry / Skeleton Key / Deceptive Delight",
     "many-shot": "Many-Shot — long-context in-context-learning bypass",
+    "artprompt": "ArtPrompt — ASCII-art keyword masking",
 }
 
 

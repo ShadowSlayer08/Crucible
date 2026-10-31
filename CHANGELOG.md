@@ -4,6 +4,48 @@ All notable changes to CRUCIBLE (CRUCIBLE). Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses date-stamped
 milestones rather than published releases (source-available, not on PyPI).
 
+## [3.1.0] — 2026
+
+Adaptive-attacker, benchmark-comparability, serving, and self-curation upgrades on
+top of v3.0.0.
+
+### Added — attackers & coverage
+- **Ensemble attacker** — `--ensemble-attackers m1,m2,…` rotates the generating model
+  per `--dynamic` round for mutation diversity (`AttackerLLM.rotate`).
+- **`--local-attacker`** — one-flag preset: `--dynamic` against a local Ollama
+  attacker, auto-picking an uncensored pulled model.
+- **`--mode artprompt`** — ArtPrompt ASCII-art keyword-masking jailbreak (Jiang 2024):
+  the trigger word is hidden as 5×5 block-font art the filter can't read.
+
+### Added — benchmarking & judging
+- **Benchmark graders** — `--grader harmbench|jailbreakbench|strongreject|all`
+  (+`--grader-judge`): faithful rubrics + parsers re-score a run so the ASR is
+  comparable to those papers' numbers; LLM-judge path with an offline heuristic.
+- **`--benchmark-suite`** — run a benchmark's prompt set (bundled sample or
+  `--benchmark-file`) and auto-score with the matching grader.
+- **`--cross-judge [MODEL]`** — judge with a local model distinct from the attacker
+  to cut self-scoring bias, across `--dynamic` and `--grader-judge`.
+
+### Added — self-improving KB
+- **KB quality management** — `record_success` / `prune` / `quality_report`; the grow
+  loop reinforces repeat wins instead of dropping near-duplicates; `--kb-prune`
+  `[--kb-prune-max-age-days N] [--kb-prune-min-success K]` + a `--kb-stats` snapshot.
+
+### Added — serving, tooling & docs
+- **Web-UI auth** — the `--serve` dashboard/API now requires a password
+  (`--serve-password` / `CRUCIBLE_SERVE_PASSWORD`) exchanged for a stdlib **HS256 JWT**;
+  both the zero-build dashboard and the React SPA authenticate.
+- **Shell completion** — `crucible --completion bash|zsh|fish` (parser-introspected).
+- **MkDocs documentation site** (`mkdocs.yml` + Material theme, `mkdocs` extra).
+
+### Fixed
+- Mutate report/JSON now cover all 16 mutators (derived from `all_mutations()`),
+  not a stale hardcoded 8.
+- Hardened a flaky throttle timing assertion.
+
+### Tooling
+- CI on py3.10–3.12 stays green at **~1,950 tests**.
+
 ## [3.0.0] — 2026
 
 The v3 line turns the CLI into a full black-box AI red-team platform. See

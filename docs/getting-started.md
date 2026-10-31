@@ -4,7 +4,7 @@ CRUCIBLE is a black-box, **authorized-testing-only** offensive tool for LLM and
 agentic systems. It fires 20+ attack suites at a target, adapts when refused, and
 maps every break to MITRE ATLAS / OWASP LLM Top 10 / NIST AI RMF.
 
-The console command is `crucible` (short alias `cru`), version `3.0.0`. This guide
+The console command is `crucible` (short alias `cru`), version `3.1.0`. This guide
 takes you from a clean checkout to your first run — locally, against a hosted
 target, in Docker, and with shell completion wired up.
 
@@ -53,7 +53,7 @@ Both `crucible` and the short `cru` land on `PATH` after any profile install.
 
 ```bash
 pip install -e ".[all]"      # CLI + PDF + web dashboard + docs
-crucible --version           # 3.0.0
+crucible --version           # 3.1.0
 ```
 
 ---
@@ -124,17 +124,17 @@ with the `server` + `pdf` extras and the `crucible` console script as the
 entrypoint. (The browser/Playwright extra is intentionally omitted from the image.)
 
 ```bash
-docker build -t crucible:3.0.0 .
+docker build -t crucible:3.1.0 .
 
 # Sanity check
-docker run --rm crucible:3.0.0 --version
+docker run --rm crucible:3.1.0 --version
 
 # Run against a hosted target, mounting a reports volume
-docker run --rm -v "$PWD/reports:/app/reports" crucible:3.0.0 \
+docker run --rm -v "$PWD/reports:/app/reports" crucible:3.1.0 \
   --mode vapt --endpoint https://api.openai.com --api-key "$KEY" --model gpt-4o
 
 # Web dashboard (bind to all interfaces so the mapped port is reachable)
-docker run --rm -p 8000:8000 crucible:3.0.0 --serve --serve-host 0.0.0.0
+docker run --rm -p 8000:8000 crucible:3.1.0 --serve --serve-host 0.0.0.0
 ```
 
 Reports land in the mounted `/app/reports` volume; the container runs as an

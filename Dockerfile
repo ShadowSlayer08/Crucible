@@ -2,11 +2,11 @@
 # Multi-stage image: build a wheel, then a slim non-root runtime with the
 # `crucible` console script on PATH (CLI + PDF + web dashboard extras).
 #
-#   docker build -t crucible:3.0.0 .
-#   docker run --rm crucible:3.0.0 --version
-#   docker run --rm -v "$PWD/reports:/app/reports" crucible:3.0.0 \
+#   docker build -t crucible:3.1.0 .
+#   docker run --rm crucible:3.1.0 --version
+#   docker run --rm -v "$PWD/reports:/app/reports" crucible:3.1.0 \
 #       --mode vapt --endpoint https://api.openai.com --api-key "$KEY" --model gpt-4o
-#   docker run --rm -p 8000:8000 crucible:3.0.0 --serve --serve-host 0.0.0.0
+#   docker run --rm -p 8000:8000 crucible:3.1.0 --serve --serve-host 0.0.0.0
 #
 # Authorized testing only. See SECURITY.md.
 
@@ -24,7 +24,7 @@ FROM python:3.12-slim AS runtime
 LABEL org.opencontainers.image.title="CRUCIBLE" \
       org.opencontainers.image.description="Trial by fire for AI — black-box offensive testing for LLM / agentic systems." \
       org.opencontainers.image.source="https://github.com/ShadowSlayer08/Crucible" \
-      org.opencontainers.image.version="3.0.0" \
+      org.opencontainers.image.version="3.1.0" \
       org.opencontainers.image.licenses="LicenseRef-Source-Available"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
