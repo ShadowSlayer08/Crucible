@@ -2,6 +2,7 @@ site_name: CRUCIBLE
 site_description: >-
   Trial by fire for AI — black-box offensive testing that hunts, adapts, and
   proves the failure modes your LLM ships with.
+site_url: https://shadowslayer08.github.io/Crucible/
 repo_url: https://github.com/ShadowSlayer08/Crucible
 repo_name: ShadowSlayer08/Crucible
 docs_dir: docs
