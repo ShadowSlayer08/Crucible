@@ -4,7 +4,7 @@
 
 CRUCIBLE is a black-box, offensive-capable red-team CLI for LLMs and AI agents. Point it at any model or agent endpoint and it throws 20+ attack suites at the target, adapts when it gets refused, maps every break to MITRE ATLAS / OWASP LLM Top 10 / NIST AI RMF, and returns a verdict — with confidence intervals — that you can take to a review board. It runs fully local and air-gapped when you need it to, recons the infrastructure around the model, and grows its own attacks over time.
 
-The console command is `crucible` (short alias `cru`). This documentation covers version 3.0.0.
+The console command is `crucible` (short alias `cru`). This documentation covers version 3.1.0.
 
 ## Capabilities at a glance
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 ╔══════════════════════════════════════════════════════════╗
-║        CRUCIBLE — Trial by fire for AI · v3.0.0          ║
+║        CRUCIBLE — Trial by fire for AI · v3.1.0          ║
 ║  VAPT | Red Team | ATLAS | OWASP | Discovery | MultiTurn ║
 ╚══════════════════════════════════════════════════════════╝
 
@@ -132,7 +132,7 @@ print_lock = Lock()
 # BANNER
 # ─────────────────────────────────────────────────────────────────────────────
 
-__version__ = "3.0.0"
+__version__ = "3.1.0"
 
 
 def banner():

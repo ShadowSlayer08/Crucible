@@ -10,7 +10,7 @@ then proves them, with error bars.
 </p>
 
 <p align="center">
-  <img alt="tests" src="https://img.shields.io/badge/tests-1800%2B%20passing-3fd07d?style=flat-square">
+  <img alt="tests" src="https://img.shields.io/badge/tests-1947%20passing-3fd07d?style=flat-square">
   <img alt="python" src="https://img.shields.io/badge/python-3.10%2B-5b9dff?style=flat-square">
   <img alt="frameworks" src="https://img.shields.io/badge/ATLAS%20·%20OWASP%20·%20NIST-mapped-ff3355?style=flat-square">
   <img alt="license" src="https://img.shields.io/badge/license-source--available-8b91a3?style=flat-square">
@@ -32,7 +32,7 @@ model, and **grows its own attacks** over time.
 $ crucible --mode redteam --local --framework atlas
 
 ╔══════════════════════════════════════════════════════════╗
-║  ◈ CRUCIBLE  ·  v3.0.0  — Trial by fire for AI.           ║
+║  ◈ CRUCIBLE  ·  v3.1.0  — Trial by fire for AI.           ║
 ║  VAPT | RedTeam | ATLAS | OWASP | MCP | Agentic | RAG      ║
 ╚══════════════════════════════════════════════════════════╝
   target   qwen2.5:7b @ localhost:11434   ·   77 tests   ·   attacker: local
@@ -150,11 +150,11 @@ reference. Providers: `openai · anthropic · cohere · mistral · google · oll
 ### Docker
 
 ```bash
-docker build -t crucible:3.0.0 .
-docker run --rm crucible:3.0.0 --version
-docker run --rm -v "$PWD/reports:/app/reports" crucible:3.0.0 \
+docker build -t crucible:3.1.0 .
+docker run --rm crucible:3.1.0 --version
+docker run --rm -v "$PWD/reports:/app/reports" crucible:3.1.0 \
   --mode vapt --endpoint https://api.openai.com --api-key "$KEY" --model gpt-4o
-docker run --rm -p 8000:8000 crucible:3.0.0 --serve --serve-host 0.0.0.0   # dashboard
+docker run --rm -p 8000:8000 crucible:3.1.0 --serve --serve-host 0.0.0.0   # dashboard
 ```
 
 ---

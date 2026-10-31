@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crucible-airt"
-version = "3.0.0"
+version = "3.1.0"
 description = "CRUCIBLE — Trial by fire for AI. Automated adversarial testing and purple-team assessment for LLM/agentic systems."
 readme = "README.md"
 requires-python = ">=3.10"

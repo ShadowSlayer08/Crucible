@@ -1,6 +1,6 @@
 # Safety & Serving
 
-CRUCIBLE (`crucible`, alias `cru`, v3.0.0) is an offensive-capable, black-box AI
+CRUCIBLE (`crucible`, alias `cru`, v3.1.0) is an offensive-capable, black-box AI
 red-team CLI: it generates and sends adversarial prompts and can drive an
 autonomous attack loop. Run it **only** against systems you own or have
 **explicit written permission** to test. Unauthorized testing may violate
