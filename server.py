@@ -38,7 +38,7 @@ import classifier
 import serve_auth
 from payloads import VAPT_TESTS, REDTEAM_TESTS, EXPANDED_MODE_TESTS, enrich_test
 
-API_VERSION = "3.0"
+API_VERSION = "3.1"
 
 # ── Static fields exposed per test (avoid leaking internal/private keys) ───────
 _TEST_PUBLIC_FIELDS = (
