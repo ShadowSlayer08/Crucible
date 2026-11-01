@@ -130,3 +130,29 @@ crucible --benchmark-suite strongreject \
     CRUCIBLE bundles only its own abstract policy prompts. Download the published
     benchmark datasets from their upstream authors and point `--benchmark-file`
     at them for a real comparison.
+
+## Tier-A public corpora — `--load-corpus`
+
+Ingest a large external prompt corpus as test cases (it complements the curated
+suites and can also seed the knowledge base with `--corpus-to-kb`):
+
+```bash
+crucible --load-corpus wildjailbreak.tsv --local          # generic JSONL/CSV/TSV
+```
+
+Two public safety datasets have **first-class, tier-A importers** that map their
+native taxonomy to Llama-Guard S-codes and tag every prompt `effectiveness_tier: A`
+with real provenance:
+
+```bash
+crucible --load-corpus beavertails.jsonl --corpus-format beavertails --local
+crucible --load-corpus aegis.jsonl        --corpus-format aegis       --local
+```
+
+- **BeaverTails** (PKU-Alignment) — 14-way harm taxonomy → S1–S14.
+- **Aegis** (NVIDIA AI Content Safety) — content-safety categories → S1–S14.
+
+By default only the **unsafe** prompts are imported (expected: refusal); add
+`--corpus-include-safe` to keep the benign rows as over-refusal controls, and
+`--corpus-limit N` to cap. The datasets themselves are operator-supplied (download
+the JSONL/CSV export from the dataset's upstream page).

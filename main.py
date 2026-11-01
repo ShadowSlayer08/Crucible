@@ -576,8 +576,13 @@ def build_parser():
                    help="Run highest-effectiveness payloads first (Tier A→B→C→D by effectiveness_tier)")
     p.add_argument("--load-corpus", metavar="FILE",
                    help="Load an external prompt corpus (e.g. WildJailbreak) as tests — JSONL/CSV/TSV")
-    p.add_argument("--corpus-format", choices=["auto", "jsonl", "csv", "tsv"], default="auto",
-                   help="Format for --load-corpus (default: auto-detect by extension)")
+    p.add_argument("--corpus-format",
+                   choices=["auto", "jsonl", "csv", "tsv", "beavertails", "aegis"], default="auto",
+                   help="Format for --load-corpus: auto/jsonl/csv/tsv, or the tier-A public "
+                        "datasets 'beavertails' / 'aegis' (taxonomy→Llama-Guard mapped, tier-A tagged)")
+    p.add_argument("--corpus-include-safe", action="store_true",
+                   help="For --corpus-format beavertails/aegis: also keep the benign/safe rows "
+                        "as over-refusal controls (default: unsafe prompts only)")
     p.add_argument("--corpus-prompt-col", metavar="COL",
                    help="Column holding the prompt in --load-corpus (default: auto-detect)")
     p.add_argument("--corpus-limit", type=int, default=None, metavar="N",
@@ -2800,10 +2805,20 @@ def run_main_pipeline(args):
     if getattr(args, "load_corpus", None):
         import corpus
         try:
-            corpus_tests = corpus.load_corpus(
-                args.load_corpus, fmt=getattr(args, "corpus_format", "auto"),
-                prompt_col=getattr(args, "corpus_prompt_col", None),
-                limit=getattr(args, "corpus_limit", None))
+            _cfmt = getattr(args, "corpus_format", "auto")
+            _clim = getattr(args, "corpus_limit", None)
+            _csafe = getattr(args, "corpus_include_safe", False)
+            if _cfmt == "beavertails":
+                corpus_tests = corpus.load_beavertails(args.load_corpus, limit=_clim,
+                                                       include_safe=_csafe)
+            elif _cfmt == "aegis":
+                corpus_tests = corpus.load_aegis(args.load_corpus, limit=_clim,
+                                                 include_safe=_csafe)
+            else:
+                corpus_tests = corpus.load_corpus(
+                    args.load_corpus, fmt=_cfmt,
+                    prompt_col=getattr(args, "corpus_prompt_col", None),
+                    limit=_clim)
             corpus_tests = [metadata_mod.enrich_metadata(
                 enrich_test(enrich_owasp(t) if use_owasp else t)) for t in corpus_tests]
             if use_nist:
