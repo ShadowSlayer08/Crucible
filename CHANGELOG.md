@@ -4,6 +4,23 @@ All notable changes to CRUCIBLE (CRUCIBLE). Format follows
 [Keep a Changelog](https://keepachangelog.com/); this project uses date-stamped
 milestones rather than published releases (source-available, not on PyPI).
 
+## [Unreleased]
+
+### Added
+- **Tier-A public-dataset importers** (`--corpus-format beavertails|aegis` for
+  `--load-corpus`): first-class loaders for **BeaverTails** (PKU-Alignment) and
+  **Aegis** (NVIDIA AI Content Safety) that map each dataset's native taxonomy to
+  Llama-Guard S-codes and tag prompts `effectiveness_tier: A` with real provenance.
+  Unsafe-only by default; `--corpus-include-safe` keeps benign rows as over-refusal
+  controls.
+- **GitHub Pages**: the MkDocs site is published automatically (`.github/workflows/docs.yml`)
+  to https://shadowslayer08.github.io/Crucible/.
+
+### Changed
+- Dependency bumps (consolidated): SLM-training stack → transformers 5 / trl 1.x /
+  peft 0.21 / datasets 5 / accelerate 1.15; CI actions → setup-python v6 /
+  upload-artifact v6 / codeql-action v4.
+
 ## [3.1.0] — 2026
 
 Adaptive-attacker, benchmark-comparability, serving, and self-curation upgrades on
