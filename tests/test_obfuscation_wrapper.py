@@ -106,10 +106,52 @@ def test_mixed_script_alternates_and_changes(w):
 
 
 def test_encodings_registry_keys(w):
-    assert set(w.ENCODINGS) == {"b64", "zwsp", "unicode", "emoji", "mixed"}
+    assert set(w.ENCODINGS) == {"b64", "zwsp", "unicode", "emoji", "mixed",
+                                "atbash", "caesar", "morse", "reverse"}
     for name, method in w.ENCODINGS.items():
         assert callable(method)
         assert isinstance(method("sample text here now"), str)
+
+
+# ── classic ciphers ──────────────────────────────────────────────────────────
+
+def test_atbash_is_an_involution(w):
+    out = w.atbash("Attack the Target").split("\n", 1)[1]   # strip the instruction
+    # Atbash is its own inverse → applying the table twice restores the text.
+    import obfuscation_wrapper as ow
+    assert out.translate(ow._ATBASH) == "Attack the Target"
+    assert out != "Attack the Target"                        # it actually changed
+
+
+def test_caesar_round_trips(w):
+    msg = "Break the model now"
+    enc = w.caesar(msg, shift=3).split("\n", 1)[1]
+    dec = w.caesar(enc, shift=-3).split("\n", 1)[1]
+    assert dec == msg and enc != msg
+
+
+def test_morse_encodes_known_letters(w):
+    out = w.morse("SOS AB").split("\n", 1)[1]
+    assert "... --- ..." in out        # S O S
+    assert "/" in out                  # word separator for the space
+    assert ".- -..." in out            # A B
+
+
+def test_reverse_round_trips(w):
+    body = w.reverse("do the thing").split("\n", 1)[1]
+    assert body == "gniht eht od" and body[::-1] == "do the thing"
+
+
+def test_ciphers_lift_over_tests(w):
+    tests = [{"id": "X-1", "category": "c", "severity": "High",
+              "name": "n", "payload": "attack payload", "expected": "refusal", "tags": []}]
+    for enc in ("atbash", "caesar", "morse", "reverse"):
+        out = w.encode_tests(tests, enc)
+        assert len(out) == 1
+        assert out[0]["id"] == "X-1-" + enc.upper()
+        assert out[0]["payload"] != "attack payload"
+        assert ("obf-" + enc) in out[0]["tags"]
+        assert tests[0]["payload"] == "attack payload"     # input never mutated
 
 
 # ── encode_tests ────────────────────────────────────────────────────────────

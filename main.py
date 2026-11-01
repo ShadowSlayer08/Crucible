@@ -656,8 +656,12 @@ def build_parser():
     # ── Phase 5.5 specialised modes ───────────────────────────────────────────
     p.add_argument("--context-tokens", type=int, choices=[8000, 16000, 32000], default=16000,
                    help="In --mode rag-long, bury the injection in an N-token document")
-    p.add_argument("--encoding", choices=["b64", "zwsp", "unicode", "emoji", "mixed"],
-                   help="Re-encode the selected suite with an obfuscation wrapper")
+    p.add_argument("--encoding",
+                   choices=["b64", "zwsp", "unicode", "emoji", "mixed",
+                            "atbash", "caesar", "morse", "reverse"],
+                   help="Re-encode the selected suite with an obfuscation/cipher wrapper "
+                        "(b64/zwsp/unicode/emoji/mixed or the classic ciphers "
+                        "atbash/caesar/morse/reverse — decode-and-comply)")
     p.add_argument("--injection-type", choices=["phishing", "promotion", "denial", "failure"],
                    help="In --mode pismith, restrict to one injection objective")
     p.add_argument("--actor", choices=["benign", "adversarial", "both"], default="benign",

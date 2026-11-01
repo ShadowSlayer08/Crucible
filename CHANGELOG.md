@@ -7,6 +7,9 @@ milestones rather than published releases (source-available, not on PyPI).
 ## [Unreleased]
 
 ### Added
+- **Classic-cipher encodings** for `--encoding`: `atbash`, `caesar` (ROT-N),
+  `morse`, `reverse` — decode-and-comply wrappers that re-encode any suite's
+  payloads (alongside the existing b64/zwsp/unicode/emoji/mixed).
 - **Tier-A public-dataset importers** (`--corpus-format beavertails|aegis` for
   `--load-corpus`): first-class loaders for **BeaverTails** (PKU-Alignment) and
   **Aegis** (NVIDIA AI Content Safety) that map each dataset's native taxonomy to
