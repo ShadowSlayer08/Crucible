@@ -586,6 +586,10 @@ def main(argv=None):
     ap.add_argument("--samples", type=int, default=1, metavar="N",
                     help="Fire each payload N times per target; report ASR@1 and ASR@N "
                          "(default 1). Higher N tightens the CI ship gate.")
+    ap.add_argument("--max-probes", type=int, default=None, metavar="N",
+                    help="Cap the attack probes per attacker (default: all). Each probe is "
+                         "one attacker generation + its target fires, so fewer probes makes "
+                         "a run finish far faster (useful on a single GPU that must swap models).")
     ap.add_argument("--host", default=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
                     help="Ollama host (default: $OLLAMA_HOST or http://localhost:11434)")
     ap.add_argument("--judge", action="store_true",
@@ -597,8 +601,9 @@ def main(argv=None):
                        "Run from the repo root or fix PYTHONPATH."))
 
     targets = [t.strip() for t in str(args.target).split(",") if t.strip()]
+    probes = DEFAULT_PROBES[:args.max_probes] if args.max_probes else None
     result = ab_compare(args.base, args.slm, targets if len(targets) > 1 else targets[0],
-                        host=args.host, samples=args.samples)
+                        host=args.host, samples=args.samples, probes=probes)
     print_eval_report(result)
 
     if args.judge:

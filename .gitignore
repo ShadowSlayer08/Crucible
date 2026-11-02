@@ -57,6 +57,7 @@ slm/training_data/
 slm/checkpoints/
 slm/eval_results/
 slm/merged/
+slm/export_out/
 slm/versions.sqlite
 
 # transient run logs
