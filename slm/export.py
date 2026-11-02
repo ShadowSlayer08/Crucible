@@ -70,6 +70,29 @@ def _fail(reason: str, **extra) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. MERGE LoRA ADAPTER  (needs peft/transformers/torch + usually a GPU)
 # ─────────────────────────────────────────────────────────────────────────────
+def _ensure_tokenizer_model(base_model: str, out_dir: str) -> bool:
+    """Ensure a raw SentencePiece ``tokenizer.model`` is present in *out_dir*.
+
+    ``AutoTokenizer.save_pretrained`` emits ``tokenizer.json`` but NOT the raw
+    ``tokenizer.model`` that ``convert_hf_to_gguf.py`` requires for SentencePiece
+    models (Phi-3, Llama, …), which silently breaks GGUF export. Copy it from a local
+    base-model dir or the HF cache. Returns True if the file ends up present."""
+    import shutil
+    dst = os.path.join(out_dir, "tokenizer.model")
+    if os.path.isfile(dst):
+        return True
+    local = os.path.join(base_model, "tokenizer.model")
+    if os.path.isfile(local):
+        shutil.copyfile(local, dst)
+        return True
+    try:
+        from huggingface_hub import hf_hub_download
+        shutil.copyfile(hf_hub_download(base_model, "tokenizer.model"), dst)
+        return True
+    except Exception:
+        return False
+
+
 def merge_adapter(checkpoint: str, base_model: str, out_dir: str) -> dict:
     """Merge a LoRA adapter (`checkpoint`) into `base_model` and save to `out_dir`.
 
@@ -125,6 +148,11 @@ def merge_adapter(checkpoint: str, base_model: str, out_dir: str) -> dict:
         except Exception as te:
             print(C.YELLOW(f"  ! tokenizer copy failed ({te}); "
                            "convert_hf_to_gguf may need it manually"))
+        # AutoTokenizer.save emits tokenizer.json but NOT the raw SentencePiece
+        # tokenizer.model that convert_hf_to_gguf.py (Phi-3 etc.) needs — copy it over.
+        if not _ensure_tokenizer_model(base_model, out_dir):
+            print(C.YELLOW("  ! tokenizer.model not found; a SentencePiece GGUF export "
+                           "(e.g. Phi-3) may fail without it"))
         return _ok(f"merged adapter into {out_dir}", out_dir=out_dir)
     except Exception as e:  # pragma: no cover - real merge only runs on GPU box
         return _fail(f"merge failed: {e}", out_dir=out_dir)
