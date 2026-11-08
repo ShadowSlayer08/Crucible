@@ -415,33 +415,25 @@ def _train_unsloth(cfg: dict, train_texts: list, val_texts: list) -> dict:
 def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
     """LoRA fine-tune via peft + transformers + trl. Operator-run only."""
     import torch  # noqa: WPS433
-    from transformers import (AutoConfig, AutoModelForCausalLM, AutoTokenizer,
+    from transformers import (AutoModelForCausalLM, AutoTokenizer,
                               BitsAndBytesConfig, TrainingArguments)
     from peft import LoraConfig, prepare_model_for_kbit_training
     from trl import SFTTrainer
     from datasets import Dataset
 
     print(C.DIM(f"  loading base model via transformers: {cfg['base_model']}"))
-    tokenizer = AutoTokenizer.from_pretrained(cfg["base_model"], trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(cfg["base_model"], trust_remote_code=False)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    # Normalize rope_scaling so a transformers<->model version skew doesn't raise a
-    # bare KeyError('type') (Phi-3 configs alternate between 'type' and 'rope_type').
-    conf = AutoConfig.from_pretrained(cfg["base_model"], trust_remote_code=True)
-    rs = getattr(conf, "rope_scaling", None)
-    if isinstance(rs, dict):
-        rtype = str(rs.get("rope_type") or rs.get("type") or "").lower()
-        if rtype in ("", "default"):
-            # e.g. Phi-3-mini-4k: standard RoPE, no scaling — a stray {"type":"default"}
-            # trips transformers' validator ("Unknown RoPE scaling type default").
-            conf.rope_scaling = None
-        else:
-            rs.setdefault("type", rs.get("rope_type"))
-            rs.setdefault("rope_type", rs.get("type"))
-            conf.rope_scaling = rs
 
     dtype = torch.bfloat16 if _bf16_ok() else torch.float16
-    common = dict(config=conf, device_map="auto", trust_remote_code=True,
+    # Load the maintained BUILT-IN modeling code (trust_remote_code=False). A base's
+    # vendor-bundled modeling_phi3.py is pinned to a pre-5.x cache API
+    # (DynamicCache.seen_tokens) and silently mis-runs under transformers 5.x — training
+    # against it corrupts the adapter even though the forward pass raises no error.
+    # Modern transformers migrates the stock Phi-3 rope config (rope_scaling ->
+    # rope_parameters) on load, so no manual rope surgery is needed.
+    common = dict(device_map="auto", trust_remote_code=False,
                   attn_implementation="eager")   # flash-attn not required / not installed
 
     def _load(four_bit: bool):
@@ -452,7 +444,7 @@ def _train_peft(cfg: dict, train_texts: list, val_texts: list) -> dict:
             return AutoModelForCausalLM.from_pretrained(
                 cfg["base_model"], quantization_config=bnb, **common)
         return AutoModelForCausalLM.from_pretrained(
-            cfg["base_model"], torch_dtype=dtype, **common)
+            cfg["base_model"], dtype=dtype, **common)
 
     # 4-bit QLoRA is lowest-VRAM but needs bitsandbytes kernels for the GPU; on new
     # cards where bnb lags (e.g. Blackwell) fall back to a bf16 LoRA (Phi-3-mini fits ~12GB).
