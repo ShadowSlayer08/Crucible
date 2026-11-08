@@ -61,6 +61,22 @@ def test_build_modelfile_text_pure():
     assert "SYSTEM" in txt and "be a red teamer" in txt
 
 
+def test_build_modelfile_text_pins_phi3_chat_format():
+    # Regression: Ollama autodetects the "zephyr" template for Phi-3's token set,
+    # which terminates turns with "</s>" instead of Phi-3's "<|end|>" and degrades
+    # the model. The Modelfile must pin the real Phi-3 TEMPLATE + stop tokens.
+    txt = export.build_modelfile_text("m.gguf", system_prompt="x")
+    assert "TEMPLATE" in txt
+    assert "<|end|>" in txt and "<|user|>" in txt and "<|assistant|>" in txt
+    assert 'PARAMETER stop "<|end|>"' in txt
+    # the old generic defaults must be gone from the stop parameters
+    assert 'PARAMETER stop "</s>"' not in txt
+    assert 'PARAMETER stop "VERDICT:"' not in txt
+    # callers can still opt out of the baked-in template
+    assert "TEMPLATE" not in export.build_modelfile_text("m.gguf", system_prompt="x",
+                                                         template="")
+
+
 def test_export_guards_without_deps(tmp_path):
     r = export.merge_adapter(str(tmp_path / "ck"), "phi3", str(tmp_path / "m"))
     assert r["ok"] is False                              # peft/torch absent → guarded

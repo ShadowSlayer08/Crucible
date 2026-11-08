@@ -48,6 +48,16 @@ DEFAULT_SYSTEM_PROMPT = (
     "models, never to cause real-world harm."
 )
 
+# Phi-3 chat template, in Ollama Go-template form. Without an explicit TEMPLATE,
+# Ollama autodetects one from the GGUF and picks "zephyr" for Phi-3's token set —
+# but zephyr separates turns with "</s>", whereas Phi-3 was trained on "<|end|>".
+# That mismatch degrades instruction-following, so we pin the real Phi-3 format.
+PHI3_TEMPLATE = (
+    "{{ if .System }}<|system|>\n{{ .System }}<|end|>\n{{ end }}"
+    "{{ if .Prompt }}<|user|>\n{{ .Prompt }}<|end|>\n{{ end }}"
+    "<|assistant|>\n{{ .Response }}<|end|>\n"
+)
+
 # Quant levels llama.cpp's quantize tool accepts; used only for a friendly check.
 _KNOWN_QUANTS = {
     "Q2_K", "Q3_K_S", "Q3_K_M", "Q3_K_L", "Q4_0", "Q4_1", "Q4_K_S", "Q4_K_M",
@@ -106,7 +116,7 @@ def merge_adapter(checkpoint: str, base_model: str, out_dir: str) -> dict:
     try:
         import torch  # noqa: F401
         from peft import PeftModel
-        from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+        from transformers import AutoModelForCausalLM, AutoTokenizer
     except Exception as e:  # heavy stack absent in authoring env
         return _fail(
             "merge needs the training stack — install with "
@@ -116,21 +126,17 @@ def merge_adapter(checkpoint: str, base_model: str, out_dir: str) -> dict:
     try:
         os.makedirs(out_dir, exist_ok=True)
         print(C.DIM(f"  loading base model {base_model} …"))
-        # Same rope_scaling normalization as slm/train.py so a transformers<->Phi-3
-        # version skew doesn't raise KeyError('type') / "Unknown RoPE scaling type default".
-        conf = AutoConfig.from_pretrained(base_model, trust_remote_code=True)
-        rs = getattr(conf, "rope_scaling", None)
-        if isinstance(rs, dict):
-            rtype = str(rs.get("rope_type") or rs.get("type") or "").lower()
-            if rtype in ("", "default"):
-                conf.rope_scaling = None
-            else:
-                rs.setdefault("type", rs.get("rope_type"))
-                rs.setdefault("rope_type", rs.get("type"))
-                conf.rope_scaling = rs
+        # Load via transformers' BUILT-IN modeling code (trust_remote_code=False).
+        # The modeling code a vendor bundles with the base (e.g. microsoft/Phi-3's
+        # modeling_phi3.py) is pinned to a pre-5.x cache API (DynamicCache.seen_tokens)
+        # and silently mis-runs under transformers 5.x — a merge done that way SAVES
+        # scrambled weights that both transformers and llama.cpp then read back as
+        # garbage tokens. The maintained built-in Phi3 is correct, and modern
+        # transformers migrates the stock Phi-3 rope config (rope_scaling ->
+        # rope_parameters) on load by itself, so we must NOT hand-edit the config.
         base = AutoModelForCausalLM.from_pretrained(
-            base_model, config=conf, torch_dtype="auto", device_map="auto",
-            trust_remote_code=True, attn_implementation="eager")
+            base_model, dtype="auto", device_map="auto",
+            trust_remote_code=False, attn_implementation="eager")
         print(C.DIM(f"  applying adapter {checkpoint} …"))
         model = PeftModel.from_pretrained(base, checkpoint)
         merged = model.merge_and_unload()
@@ -280,11 +286,14 @@ def export_gguf(merged_dir: str, out_file: str, quant: str = "Q4_K_M",
 def build_modelfile_text(gguf_path: str, model_name: str = "crucible-slm",
                          system_prompt: str = DEFAULT_SYSTEM_PROMPT,
                          temperature: float = 0.8, num_ctx: int = 4096,
-                         stop: list | None = None) -> str:
+                         stop: list | None = None,
+                         template: str | None = PHI3_TEMPLATE) -> str:
     """Return the text of an Ollama Modelfile pointing at `gguf_path`.
 
     Pure stdlib — no subprocess, no deps — so it is unit-testable anywhere. The
     SYSTEM block escapes embedded triple-quotes to keep the Modelfile valid.
+    `template` pins the chat format (defaults to the Phi-3 template); pass ""/None
+    to omit it and let Ollama autodetect.
     """
     safe_system = (system_prompt or "").replace('"""', '\\"\\"\\"').strip()
     lines = [
@@ -295,8 +304,14 @@ def build_modelfile_text(gguf_path: str, model_name: str = "crucible-slm",
         f"PARAMETER temperature {temperature}",
         f"PARAMETER num_ctx {num_ctx}",
     ]
-    for s in (stop or ["</s>", "VERDICT:"]):
+    # Phi-3 turn terminators. The generic "</s>" is NOT Phi-3's turn token (that is
+    # token 2, but the chat format terminates turns with <|end|>/<|endoftext|>), so
+    # stopping on it lets generation run past a turn; stopping on "VERDICT:" would
+    # truncate the judge's own "VERDICT: PASS". Use the real Phi-3 special tokens.
+    for s in (stop or ["<|end|>", "<|endoftext|>", "<|user|>", "<|system|>"]):
         lines.append(f'PARAMETER stop "{s}"')
+    if template:
+        lines += ["", f'TEMPLATE """{template}"""']
     lines += ["", 'SYSTEM """', safe_system, '"""', ""]
     return "\n".join(lines)
 
