@@ -181,7 +181,38 @@ class LocalLLMEngine:
         if system:
             body["system"] = system
         try:
-            return self._post("/api/generate", body).get("response", "") or ""
+            raw = self._post("/api/generate", body).get("response", "") or ""
+        except Exception:
+            raw = ""
+        # Reasoning / harmony-format models (gpt-oss-style GGUFs, many "uncensored"
+        # 26-27B merges) spend their whole token budget in a hidden reasoning channel
+        # on the raw completion endpoint, so `response` comes back empty — or with a
+        # leaked "<|channel|>thought…" prefix. Retry ONCE via /api/chat with thinking
+        # disabled: that spends the budget on the actual answer and returns it cleanly
+        # in message.content. Non-reasoning models never enter this branch (their raw
+        # response is already usable), so their output is byte-for-byte unchanged.
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("<|"):
+            alt = self._chat_no_think(prompt, model, system, temperature, max_tokens)
+            if alt:
+                return alt
+        return raw
+
+    def _chat_no_think(self, prompt: str, model: str, system: str = "",
+                       temperature: float = 0.7, max_tokens: int = 512) -> str:
+        """One-shot /api/chat with reasoning turned off — the rescue path for
+        reasoning models whose raw-completion output is empty or a leaked thinking
+        channel. Returns the cleaned assistant content, or "" on any error (so a
+        model that does not support the `think` flag degrades to the raw result)."""
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        body = {"model": model, "messages": messages, "stream": False, "think": False,
+                "options": {"temperature": temperature, "num_predict": max_tokens}}
+        try:
+            msg = self._post("/api/chat", body).get("message", {}) or {}
+            return (msg.get("content", "") or "").strip()
         except Exception:
             return ""
 
