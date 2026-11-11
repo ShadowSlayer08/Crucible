@@ -102,6 +102,61 @@ def test_generate_swallows_errors():
     assert _Boom().generate("hi", "m") == ""
 
 
+# ── reasoning-model think=False fallback in generate() ───────────────────────
+# Reasoning / harmony-format models (gpt-oss-style GGUFs, many "uncensored" 26-27B
+# merges) burn their whole token budget in a hidden reasoning channel on the raw
+# /api/generate endpoint, so `response` comes back empty — or with a leaked
+# "<|channel|>thought…" prefix. generate() detects that and retries once via
+# /api/chat with thinking disabled; non-reasoning models must be left untouched.
+class _RoutingEngine(local_engine.LocalLLMEngine):
+    """Route /api/generate and /api/chat to canned replies and record which
+    endpoints were hit, so the fallback behaviour can be asserted without a daemon."""
+    def __init__(self, gen_response="", chat_content="chat-answer"):
+        super().__init__()
+        self._gen_response = gen_response
+        self._chat_content = chat_content
+        self.calls = []
+        self.last_chat_body = None
+
+    def _post(self, path, body):
+        self.calls.append(path)
+        if path == "/api/chat":
+            self.last_chat_body = body
+            return {"message": {"role": "assistant", "content": self._chat_content}}
+        return {"response": self._gen_response}
+
+
+def test_generate_normal_path_no_fallback():
+    # A usable raw completion is returned verbatim and /api/chat is never called.
+    e = _RoutingEngine(gen_response="a normal payload", chat_content="SHOULD-NOT-BE-USED")
+    assert e.generate("p", "m") == "a normal payload"
+    assert e.calls == ["/api/generate"]
+
+
+def test_generate_empty_triggers_think_false_fallback():
+    # Empty raw completion -> one retry via /api/chat with think=False.
+    e = _RoutingEngine(gen_response="   ", chat_content="clean adversarial prompt")
+    assert e.generate("p", "m", system="sys") == "clean adversarial prompt"
+    assert e.calls == ["/api/generate", "/api/chat"]
+    assert e.last_chat_body["think"] is False
+    assert [m["role"] for m in e.last_chat_body["messages"]] == ["system", "user"]
+
+
+def test_generate_channel_leak_triggers_fallback():
+    # A leaked "<|channel|>thought…" prefix is unusable -> fallback to chat.
+    e = _RoutingEngine(gen_response="<|channel|>thought\nreasoning…", chat_content="clean prompt")
+    assert e.generate("p", "m") == "clean prompt"
+    assert "/api/chat" in e.calls
+
+
+def test_generate_keeps_raw_when_fallback_also_empty():
+    # If the chat fallback yields nothing either, degrade gracefully to the raw
+    # result (empty) — a model that ignores `think` must not crash generate().
+    e = _RoutingEngine(gen_response="", chat_content="")
+    assert e.generate("p", "m") == ""
+    assert e.calls == ["/api/generate", "/api/chat"]
+
+
 # ── engine offline guard ─────────────────────────────────────────────────────
 def test_offline_guard_blocks_non_local():
     engine.set_offline(True)
