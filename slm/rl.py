@@ -227,7 +227,8 @@ def train_rl(base_model: str = DEFAULT_BASE_MODEL, target_model: str = DEFAULT_T
              steps: int = 200, group: int = 6, lr: float = 1e-5,
              max_completion_tokens: int = 128, temperature: float = 0.9,
              lora_r: int = 16, lora_alpha: int = 32, lora_dropout: float = 0.05,
-             grad_accum: int = 1, seed: int = 1234, probes=None) -> dict:
+             grad_accum: int = 1, seed: int = 1234, probes=None,
+             resume: bool = False) -> dict:
     """GRPO-fine-tune `base_model` so its payloads maximise attack success at `target_model`.
     Returns a result dict; on a box without GPU / trl-GRPO / a reachable target it prints a
     requirements message and returns {"ok": False, ...} WITHOUT crashing."""
@@ -315,8 +316,18 @@ def train_rl(base_model: str = DEFAULT_BASE_MODEL, target_model: str = DEFAULT_T
     trainer = GRPOTrainer(model=model, args=gcfg, train_dataset=train_ds,
                           reward_funcs=[reward_fn], peft_config=lora, **tkw)
     os.makedirs(out_dir, exist_ok=True)
+    # Resume from the latest checkpoint (written every save_steps) when --resume and one
+    # exists — lets a long run that gets killed on a session suspend accumulate across
+    # relaunches instead of restarting from step 0 each time. ~75s/step means a 400-step
+    # run spans many sessions on this box, so this is how it actually finishes.
+    resume_from = bool(resume and _has_checkpoint(out_dir))
+    if resume and not resume_from:
+        print(C.YELLOW(f"  --resume set but no checkpoint in {os.path.join(out_dir, '_runs')}"
+                       "; starting fresh"))
+    elif resume_from:
+        print(C.DIM(f"  resuming from latest checkpoint in {os.path.join(out_dir, '_runs')}"))
     try:
-        trainer.train()
+        trainer.train(resume_from_checkpoint=resume_from)
     except Exception as exc:  # pragma: no cover - host/GPU dependent
         print(C.RED(f"✗ GRPO training failed: {exc}"))
         return {"ok": False, "reason": f"training-error: {exc}", "env": env}
@@ -326,6 +337,16 @@ def train_rl(base_model: str = DEFAULT_BASE_MODEL, target_model: str = DEFAULT_T
     return {"ok": True, "backend": "trl-grpo", "out_dir": out_dir,
             "steps": steps, "group": group, "target": target_model,
             "quantized": used_4bit}
+
+
+def _has_checkpoint(out_dir: str) -> bool:
+    """True if out_dir/_runs holds a resumable HF Trainer checkpoint (checkpoint-N)."""
+    ckpt_dir = os.path.join(out_dir, "_runs")
+    try:
+        return os.path.isdir(ckpt_dir) and any(
+            d.startswith("checkpoint-") for d in os.listdir(ckpt_dir))
+    except OSError:
+        return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -351,11 +372,13 @@ def main(argv=None):
     ap.add_argument("--max-completion-tokens", type=int, default=128)
     ap.add_argument("--temperature", type=float, default=0.9)
     ap.add_argument("--lora-r", type=int, default=16)
+    ap.add_argument("--resume", action="store_true",
+                    help="Resume from the latest checkpoint in --out/_runs (survives session kills)")
     args = ap.parse_args(argv)
     res = train_rl(base_model=args.base, target_model=args.target, host=args.host,
                    out_dir=args.out, steps=args.steps, group=args.group, lr=args.lr,
                    max_completion_tokens=args.max_completion_tokens,
-                   temperature=args.temperature, lora_r=args.lora_r)
+                   temperature=args.temperature, lora_r=args.lora_r, resume=args.resume)
     return 0 if res.get("ok") else 1
 
 
