@@ -104,3 +104,13 @@ def test_check_rl_env_shape():
     assert isinstance(env, dict)
     assert env["ok"] is False                 # unreachable host / missing target
     assert "missing" in env and isinstance(env["missing"], list)
+
+
+# ── checkpoint-resume detection (enables surviving session kills) ────────────
+def test_has_checkpoint(tmp_path):
+    out = tmp_path / "ck"
+    assert rl._has_checkpoint(str(out)) is False            # no dir at all
+    (out / "_runs").mkdir(parents=True)
+    assert rl._has_checkpoint(str(out)) is False            # _runs exists but empty
+    (out / "_runs" / "checkpoint-100").mkdir()
+    assert rl._has_checkpoint(str(out)) is True             # a checkpoint is present
